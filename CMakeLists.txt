@@ -30,6 +30,8 @@ qt_add_qml_module(appQUTI_interface
     RESOURCES
         assets/input.svg
         assets/output.svg
+        QML_FILES Effects_panel.qml
+        QML_FILES qml/Bus_panel.qml
 )
 
 

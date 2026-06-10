@@ -6,7 +6,10 @@ Rectangle {
     id: controlInputRoot
     property string controlId: "rotary_1" // Matches JSON id
 
-    // FIX 1: Expose the pin to the global Canvas for coordinate mapping
+    // ADD THIS: Bring in the router pattern
+    property var router: null
+
+    // Expose the pin to the global Canvas for coordinate mapping
     property alias outputPin: outputIcon
 
     width: 170
@@ -29,7 +32,7 @@ Rectangle {
             Layout.alignment: Qt.AlignVCenter
         }
 
-        Item { Layout.fillWidth: true } // Spacer
+        Item { Layout.fillWidth: true }
 
         Switch {
             checked: true
@@ -38,34 +41,30 @@ Rectangle {
         }
     }
 
-    // Output Routing Pin (Moved outside RowLayout for proper edge anchoring)
+    // Output Routing Pin
     Image {
-        id: outputIcon // FIX 2: Renamed to avoid property collision
+        id: outputIcon
         source: "../assets/output.svg"
         sourceSize.height: 16
         anchors.right: parent.right
-        anchors.rightMargin: -16
+        anchors.rightMargin: -32
         anchors.verticalCenter: parent.verticalCenter
         z: 10
 
         MouseArea {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
+            preventStealing: true
 
-            // FIX 3: Full drag-and-drop continuous tracking
-            onPressed: (mouse) => {
-                workspace.startConnection(controlInputRoot, outputIcon, "control_out");
-                workspace.currentMousePos = mapToItem(workspace, mouse.x, mouse.y);
-                connectionCanvas.requestPaint();
-            }
-
-            onPositionChanged: (mouse) => {
-                workspace.currentMousePos = mapToItem(workspace, mouse.x, mouse.y);
-                connectionCanvas.requestPaint();
-            }
-
-            onReleased: (mouse) => {
-                workspace.resetRoutingState();
+            onClicked: {
+                if (!router)
+                    return;
+                // Start routing from the control output
+                router.startConnection(controlInputRoot, outputIcon, "control");
+                let pinCenter = outputIcon.mapToItem(router, outputIcon.width/2, outputIcon.height/2);
+                router.currentMousePos = pinCenter;
+                router.isDrawingLine = true;
+                router.requestRepaint();
             }
         }
     }
