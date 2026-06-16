@@ -4,7 +4,7 @@ import QtQuick.Layouts
 
 Rectangle {
     id: controlInputRoot
-    property string controlId: "rotary_1" // Matches JSON id
+    property string controlId: "rotary_0" // Matches JSON id
 
     // ADD THIS: Bring in the router pattern
     property var router: null
@@ -24,7 +24,7 @@ Rectangle {
         spacing: 10
 
         Text {
-            text: "ROTARY 1"
+            text: "ROTARY 0"
             color: "white"
             font.pixelSize: 11
             font.bold: true

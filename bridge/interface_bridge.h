@@ -3,21 +3,28 @@
 
 #include <QObject>
 #include <QTcpSocket>
-#include <QJsonDocument>
-#include <QJsonArray>
-#include <QJsonObject>
+#include <QString>
 
 class InterfaceBridge : public QObject
 {
     Q_OBJECT
+    // Expose the connection state to QML
+    Q_PROPERTY(bool isConnected READ isConnected NOTIFY connectionStatusChanged)
+
 public:
     explicit InterfaceBridge(QObject *parent = nullptr);
+    bool isConnected() const;
 
-    Q_INVOKABLE void sendBusConfiguration(const QVariantList &buses);
+public slots:
+    void connectToServer();
+    void sendGraphData(const QString &jsonPayload);
+
+signals:
+    void connectionStatusChanged(bool connected);
 
 private:
     QTcpSocket *socket;
-    void connectToServer();
+    bool m_isConnected;
 };
 
 #endif // INTERFACE_BRIDGE_H

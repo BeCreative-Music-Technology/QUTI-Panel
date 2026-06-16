@@ -1,48 +1,48 @@
 #include "interface_bridge.h"
 #include <QDebug>
+#include <QTimer>
 
-InterfaceBridge::InterfaceBridge(QObject *parent) : QObject(parent)
+InterfaceBridge::InterfaceBridge(QObject *parent) : QObject(parent), m_isConnected(false)
 {
     socket = new QTcpSocket(this);
+
+    // Wire up socket state changes to our QML-exposed property
+    connect(socket, &QTcpSocket::connected, this, [this]() {
+        m_isConnected = true;
+        emit connectionStatusChanged(true);
+        qDebug() << "AudioBridge: Connected to Rust DSP server";
+    });
+
+    connect(socket, &QTcpSocket::disconnected, this, [this]() {
+        m_isConnected = false;
+        emit connectionStatusChanged(false);
+        qDebug() << "AudioBridge: Disconnected from Rust DSP server";
+    });
+
     connectToServer();
 }
 
 void InterfaceBridge::connectToServer()
 {
-    socket->connectToHost("127.0.0.1", 12345);
-    if (!socket->waitForConnected(1000)) {
-        qWarning() << "AudioBridge: Could not connect to DSP server";
+    if (socket->state() != QAbstractSocket::ConnectedState) {
+        socket->connectToHost("patchbox.local", 31628); // Ensure this port matches your Rust backend
     }
 }
 
-void InterfaceBridge::sendBusConfiguration(const QVariantList &buses)
+bool InterfaceBridge::isConnected() const
 {
-    QJsonArray busArray;
-    for (const QVariant &busVar : buses) {
-        QVariantMap bus = busVar.toMap();
-        QJsonObject busObj;
-        busObj["id"] = bus["id"].toString();
-        busObj["enabled"] = bus["enabled"].toBool();
+    return m_isConnected;
+}
 
-        QJsonArray effectsArray;
-        QVariantList effects = bus["effects"].toList();
-        for (const QVariant &fxVar : effects) {
-            QVariantMap fx = fxVar.toMap();
-            QJsonObject fxObj;
-            fxObj["effect_type"] = fx["effect_type"].toString();
-            fxObj["parameters"] = QJsonObject::fromVariantMap(fx["parameters"].toMap());
-            effectsArray.append(fxObj);
-        }
-        busObj["effects"] = effectsArray;
-        busArray.append(busObj);
-    }
-
-    QJsonDocument doc(busArray);
-    QByteArray data = doc.toJson(QJsonDocument::Compact) + "\n";
-
+void InterfaceBridge::sendGraphData(const QString &jsonPayload)
+{
     if (socket->state() == QAbstractSocket::ConnectedState) {
+        // Rust's reader.lines() expects a newline delimiter
+        QByteArray data = jsonPayload.toUtf8() + "\n";
         socket->write(data);
         socket->flush();
+        qDebug() << "Sent DSP configuration via TCP:" << data.trimmed();
+    } else {
+        qWarning() << "AudioBridge: Cannot send data, TCP socket is not connected.";
     }
-    qDebug() << "Sent bus configuration:" << data;
 }

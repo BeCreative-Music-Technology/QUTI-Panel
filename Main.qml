@@ -125,11 +125,13 @@ ApplicationWindow {
 
         function serializeGraph() {
             let jsonPayload = {
-                "control_inputs": [ { "id": "rotary_1", "control_type": "rotary" } ],
+                // Note: Your Rust Dto struct doesn't have a root-level control_inputs array,
+                // but Serde ignores unknown fields by default. Cleaned it up here to be tidy.
                 "audio_buses": []
             };
 
-            for (let b = 1; b <= 4; ++b) {
+            // FIX 1: Match your example JSON layout which indexes buses from 0 to 3 (bus_0, bus_1, etc.)
+            for (let b = 0; b <= 3; ++b) {
                 let busId = "bus_" + b;
                 let busEnabled = busPanel.isBusEnabled(busId);
                 let busObj = { "id": busId, "enabled": busEnabled, "effects": [] };
@@ -151,13 +153,19 @@ ApplicationWindow {
                                 }
                             }
 
+                            // FIX 2: Instead of hardcoding "param", dynamically match the
+                            // string keys your specific Rust effect handlers look for.
+                            let paramKey = "gain";
+                            if (effect.type === "low_pass_filter") paramKey = "cutoff";
+                            else if (effect.type === "reverb") paramKey = "room_size";
+
                             busObj.effects.push({
-                                "id": effectId,
+                                // Ensure effect.type outputs exact snake_case strings ("gain", "low_pass_filter", "reverb")
                                 "effect_type": effect.type,
                                 "parameters": [
                                     {
-                                        "key": "param",
-                                        "value": String(effect.value),
+                                        "key": effect.parameterKey || paramKey,
+                                        "value": parseInt(effect.value, 10), // FIX 3: Parse as raw Integer! NO quotes around numbers.
                                         "input_control_id": connectedControlId
                                     }
                                 ]
@@ -173,23 +181,7 @@ ApplicationWindow {
         }
 
         function transmitGraphData(payload) {
-            let xhr = new XMLHttpRequest();
-            let targetUrl = "http://127.0.0.1:8080/api/dsp/apply";
-
-            xhr.open("POST", targetUrl, true);
-            xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
-
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === XMLHttpRequest.DONE) {
-                    if (xhr.status === 200) {
-                        console.log("DSP Config successfully synchronized to hardware device.");
-                    } else {
-                        console.warn("Transmission error occurred code:", xhr.status, xhr.statusText);
-                    }
-                }
-            };
-
-            xhr.send(JSON.stringify(payload));
+            interfaceBridge.sendGraphData(JSON.stringify(payload));
 
         }
 
@@ -383,32 +375,78 @@ ApplicationWindow {
         workspace: workspace
     }
 
-    Button {
-        id: sendButton
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.margins: 20
-        width: 160
-        height: 45
-        z: 110
+    Item {
+            id: statusContainer
+            anchors.bottom: parent.bottom
+            anchors.right: parent.right
+            anchors.margins: 20
+            width: statusLayout.implicitWidth
+            height: statusLayout.implicitHeight
+            z: 110
 
-        background: Rectangle {
-            color: sendButton.hovered ? "#e5006e" : "#ff007c"
-            radius: parent.height / 2
+            RowLayout {
+                id: statusLayout
+                anchors.fill: parent
+                spacing: 8
+
+                Rectangle {
+                    width: 12
+                    height: 12
+                    radius: 6
+                    color: interfaceBridge.isConnected ? "#9ece6a" : "#f7768e"
+                    Layout.alignment: Qt.AlignVCenter
+
+                    Behavior on color { ColorAnimation { duration: 200 } }
+                }
+
+                Text {
+                    text: interfaceBridge.isConnected ? "Connected to Rust DSP" : "Disconnected (Click to retry)"
+                    color: "#c0caf5"
+                    font.pixelSize: 14
+                    font.bold: true
+                    Layout.alignment: Qt.AlignVCenter
+                }
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    if (!interfaceBridge.isConnected) {
+                        interfaceBridge.connectToServer();
+                    }
+                }
+            }
         }
 
-        contentItem: Text {
-            text: "Send to Guitar"
-            color: sendButton.hovered ? "white" : "#1a1b26"
-            font.pixelSize: 14
-            font.bold: true
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-        }
+        // 2. Send Button (Shifted up slightly to sit on top of the status indicator)
+        Button {
+            id: sendButton
+            anchors.right: parent.right
+            anchors.bottom: statusContainer.top // Anchored to the top of the status text
+            anchors.rightMargin: 20
+            anchors.bottomMargin: 12            // 12px vertical gap between button and text
+            width: 160
+            height: 45
+            z: 110
 
-        onClicked: (mouse) => {
-            let activeGraph = workspace.serializeGraph();
-            workspace.transmitGraphData(activeGraph);
+            background: Rectangle {
+                color: sendButton.hovered ? "#e5006e" : "#ff007c"
+                radius: parent.height / 2
+            }
+
+            contentItem: Text {
+                text: "Send to Guitar"
+                color: sendButton.hovered ? "white" : "#1a1b26"
+                font.pixelSize: 14
+                font.bold: true
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+
+            onClicked: (mouse) => {
+                let activeGraph = workspace.serializeGraph();
+                workspace.transmitGraphData(activeGraph);
+            }
         }
-    }
 }

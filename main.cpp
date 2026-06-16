@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
     }
 
     engine.rootContext()->setContextProperty("ModuleRegistry", moduleRegistry);
-    engine.rootContext()->setContextProperty("audioBridge", &interfaceBridge);
+    engine.rootContext()->setContextProperty("interfaceBridge", &interfaceBridge);
 
     engine.loadFromModule("QUTI_interface", "Main");
 
