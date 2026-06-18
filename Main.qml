@@ -125,12 +125,9 @@ ApplicationWindow {
 
         function serializeGraph() {
             let jsonPayload = {
-                // Note: Your Rust Dto struct doesn't have a root-level control_inputs array,
-                // but Serde ignores unknown fields by default. Cleaned it up here to be tidy.
                 "audio_buses": []
             };
 
-            // FIX 1: Match your example JSON layout which indexes buses from 0 to 3 (bus_0, bus_1, etc.)
             for (let b = 0; b <= 3; ++b) {
                 let busId = "bus_" + b;
                 let busEnabled = busPanel.isBusEnabled(busId);
@@ -153,19 +150,19 @@ ApplicationWindow {
                                 }
                             }
 
-                            // FIX 2: Instead of hardcoding "param", dynamically match the
-                            // string keys your specific Rust effect handlers look for.
+                            // Map the correct parameter keys
                             let paramKey = "gain";
                             if (effect.type === "low_pass_filter") paramKey = "cutoff";
                             else if (effect.type === "reverb") paramKey = "room_size";
+                            else if (effect.type === "delay") paramKey = "time";
 
                             busObj.effects.push({
-                                // Ensure effect.type outputs exact snake_case strings ("gain", "low_pass_filter", "reverb")
                                 "effect_type": effect.type,
+                                "mix": 100,
                                 "parameters": [
                                     {
                                         "key": effect.parameterKey || paramKey,
-                                        "value": parseInt(effect.value, 10), // FIX 3: Parse as raw Integer! NO quotes around numbers.
+                                        "value": parseInt(effect.value, 10),
                                         "input_control_id": connectedControlId
                                     }
                                 ]

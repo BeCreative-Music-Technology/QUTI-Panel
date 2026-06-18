@@ -23,7 +23,7 @@ qt_add_qml_module(appQUTI_interface
         qml/Control_input.qml
         modules/ModuleRegistry.qml
         modules/GainModule.qml
-        modules/TunerModule.qml
+        modules/DelayModule.qml
     SOURCES
         bridge/interface_bridge.h
         bridge/interface_bridge.cpp
@@ -32,6 +32,8 @@ qt_add_qml_module(appQUTI_interface
         assets/output.svg
         QML_FILES Effects_panel.qml
         QML_FILES qml/Bus_panel.qml
+        QML_FILES modules/LowPassFilterModule.qml
+        QML_FILES modules/ReverbModule.qml
 )
 
 
