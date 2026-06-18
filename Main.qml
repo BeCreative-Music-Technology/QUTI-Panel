@@ -128,7 +128,8 @@ ApplicationWindow {
                 "audio_buses": []
             };
 
-            for (let b = 0; b <= 3; ++b) {
+            // Changed: Loop through 0, 1, 2 to match your model: 3 correctly
+            for (let b = 0; b < 3; ++b) {
                 let busId = "bus_" + b;
                 let busEnabled = busPanel.isBusEnabled(busId);
                 let busObj = { "id": busId, "enabled": busEnabled, "effects": [] };
@@ -179,7 +180,6 @@ ApplicationWindow {
 
         function transmitGraphData(payload) {
             interfaceBridge.sendGraphData(JSON.stringify(payload));
-
         }
 
         function findNodeItem(id) {
@@ -373,77 +373,77 @@ ApplicationWindow {
     }
 
     Item {
-            id: statusContainer
-            anchors.bottom: parent.bottom
-            anchors.right: parent.right
-            anchors.margins: 20
-            width: statusLayout.implicitWidth
-            height: statusLayout.implicitHeight
-            z: 110
+        id: statusContainer
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+        anchors.margins: 20
+        width: statusLayout.implicitWidth
+        height: statusLayout.implicitHeight
+        z: 110
 
-            RowLayout {
-                id: statusLayout
-                anchors.fill: parent
-                spacing: 8
+        RowLayout {
+            id: statusLayout
+            anchors.fill: parent
+            spacing: 8
 
-                Rectangle {
-                    width: 12
-                    height: 12
-                    radius: 6
-                    color: interfaceBridge.isConnected ? "#9ece6a" : "#f7768e"
-                    Layout.alignment: Qt.AlignVCenter
+            Rectangle {
+                width: 12
+                height: 12
+                radius: 6
+                color: interfaceBridge.isConnected ? "#9ece6a" : "#f7768e"
+                Layout.alignment: Qt.AlignVCenter
 
-                    Behavior on color { ColorAnimation { duration: 200 } }
-                }
-
-                Text {
-                    text: interfaceBridge.isConnected ? "Connected to Rust DSP" : "Disconnected (Click to retry)"
-                    color: "#c0caf5"
-                    font.pixelSize: 14
-                    font.bold: true
-                    Layout.alignment: Qt.AlignVCenter
-                }
+                Behavior on color { ColorAnimation { duration: 200 } }
             }
 
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    if (!interfaceBridge.isConnected) {
-                        interfaceBridge.connectToServer();
-                    }
-                }
-            }
-        }
-
-        // 2. Send Button (Shifted up slightly to sit on top of the status indicator)
-        Button {
-            id: sendButton
-            anchors.right: parent.right
-            anchors.bottom: statusContainer.top // Anchored to the top of the status text
-            anchors.rightMargin: 20
-            anchors.bottomMargin: 12            // 12px vertical gap between button and text
-            width: 160
-            height: 45
-            z: 110
-
-            background: Rectangle {
-                color: sendButton.hovered ? "#e5006e" : "#ff007c"
-                radius: parent.height / 2
-            }
-
-            contentItem: Text {
-                text: "Send to Guitar"
-                color: sendButton.hovered ? "white" : "#1a1b26"
+            Text {
+                text: interfaceBridge.isConnected ? "Connected to Rust DSP" : "Disconnected (Click to retry)"
+                color: "#c0caf5"
                 font.pixelSize: 14
                 font.bold: true
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
-
-            onClicked: (mouse) => {
-                let activeGraph = workspace.serializeGraph();
-                workspace.transmitGraphData(activeGraph);
+                Layout.alignment: Qt.AlignVCenter
             }
         }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+                if (!interfaceBridge.isConnected) {
+                    interfaceBridge.connectToServer();
+                }
+            }
+        }
+    }
+
+    // 2. Send Button (Shifted up slightly to sit on top of the status indicator)
+    Button {
+        id: sendButton
+        anchors.right: parent.right
+        anchors.bottom: statusContainer.top // Anchored to the top of the status text
+        anchors.rightMargin: 20
+        anchors.bottomMargin: 12            // 12px vertical gap between button and text
+        width: 160
+        height: 45
+        z: 110
+
+        background: Rectangle {
+            color: sendButton.hovered ? "#e5006e" : "#ff007c"
+            radius: parent.height / 2
+        }
+
+        contentItem: Text {
+            text: "Send to Guitar"
+            color: sendButton.hovered ? "white" : "#1a1b26"
+            font.pixelSize: 14
+            font.bold: true
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+
+        onClicked: (mouse) => {
+            let activeGraph = workspace.serializeGraph();
+            workspace.transmitGraphData(activeGraph);
+        }
+    }
 }
