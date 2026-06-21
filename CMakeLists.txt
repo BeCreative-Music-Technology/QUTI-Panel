@@ -19,10 +19,15 @@ qt_add_qml_module(appQUTI_interface
     VERSION 1.0
     QML_FILES
         Main.qml
+        Effects_panel.qml
         qml/Module_base.qml
-        qml/Control_input.qml
+        qml/BusSlot.qml
+        qml/EffectTile.qml
+        qml/ConfigPanel.qml
         modules/ModuleRegistry.qml
         modules/GainModule.qml
+        modules/LowPassFilterModule.qml
+        modules/ReverbModule.qml
         modules/DelayModule.qml
     SOURCES
         bridge/interface_bridge.h
@@ -30,12 +35,8 @@ qt_add_qml_module(appQUTI_interface
     RESOURCES
         assets/input.svg
         assets/output.svg
-        QML_FILES Effects_panel.qml
-        QML_FILES qml/Bus_panel.qml
-        QML_FILES modules/LowPassFilterModule.qml
-        QML_FILES modules/ReverbModule.qml
+        QML_FILES PresetsPanel.qml
 )
-
 
 target_link_libraries(appQUTI_interface
     PRIVATE Qt6::Quick Qt6::Network

@@ -21,8 +21,8 @@ Module_base {
 
         Slider {
             id: slider
-            from: 20
-            to: 2000
+            from: 0
+            to: 1
             value: root.effectValue
             Layout.fillWidth: true
             onMoved: root.valueChanged(root.effectIndex, value)

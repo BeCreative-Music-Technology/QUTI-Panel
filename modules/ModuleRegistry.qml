@@ -12,7 +12,7 @@ QtObject {
         },
         {
             "effectType": "low_pass_filter",
-            "displayName": "LPF",
+            "displayName": "LOW PASS FILTER",
             "borderColor": "#ff9e64",
             "qmlSource": "LowPassFilterModule.qml",
             "defaultValue": 2000.0

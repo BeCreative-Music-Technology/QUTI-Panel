@@ -7,443 +7,558 @@ import "./modules"
 ApplicationWindow {
     id: rootWindow
     visible: true
-    width: 1000
-    height: 600
-    title: "Audio DSP Router"
-    color: "#0f1015"
+    width: 1480
+    height: 820
+    minimumWidth: 1100
+    minimumHeight: 650
+    title: "Audio Router"
+    color: "#0a0a0f"
 
-    ListModel { id: canvasEffectsModel }
-    ListModel { id: connectionsModel }
+    property var busEffectsMatrix: [ [null], [null], [null], [null] ]
+    property int matrixRevision: 0
+    property real mainVolume: 80
 
-    Item {
-        id: workspace
-        anchors.fill: parent
+    // Global active selection tracking
+    property int selectedBus: -1
+    property int selectedSlot: -1
+    readonly property var selectedEffect: (selectedBus >= 0 && selectedSlot >= 0 && busEffectsMatrix[selectedBus]) ? busEffectsMatrix[selectedBus][selectedSlot] : null
 
-        property var activeSourceNode: null
-        property var activeSourcePin: null
-        property string activePortType: ""
-        property bool isDrawingLine: false
-        property point currentMousePos: Qt.point(0, 0)
+    function setBusEffect(busIndex, slotIndex, moduleInfo) {
+        let matrixCopy = busEffectsMatrix.slice();
+        let busChain = matrixCopy[busIndex].slice();
 
-        function requestRepaint() {
-            connectionCanvas.requestPaint();
+        // Enforce basic parameters and an empty mapping dictionary on drop
+        busChain[slotIndex] = {
+            "type": moduleInfo.type,
+            "displayName": moduleInfo.displayName,
+            "qmlSource": moduleInfo.qmlSource,
+            "value": moduleInfo.value,
+            "enabled": true,
+            "hardwareMaps": { "Rotary": "None", "Button": "None", "Laser-1": "None", "Laser-2": "None", "Laser-3": "None" }
+        };
+
+        if (slotIndex === busChain.length - 1) {
+            busChain.push(null);
         }
 
-        function startConnection(node, pin, portType) {
-            activeSourceNode = node;
-            activeSourcePin = pin;
-            activePortType = portType;
-            isDrawingLine = true;
+        matrixCopy[busIndex] = busChain;
+        busEffectsMatrix = matrixCopy;
+        matrixRevision++;
+    }
+
+    function clearBusEffect(busIndex, slotIndex) {
+        let matrixCopy = busEffectsMatrix.slice();
+        let busChain = matrixCopy[busIndex].slice();
+
+        busChain.splice(slotIndex, 1);
+        if (busChain.length === 0 || busChain[busChain.length - 1] !== null) {
+            busChain.push(null);
         }
 
-        function completeConnection(targetNode, targetPin, portType) {
-            if (isDrawingLine && activePortType === portType) {
+        matrixCopy[busIndex] = busChain;
+        busEffectsMatrix = matrixCopy;
 
-                if (portType === "effect_out") {
-                    let busId = targetNode.busId;
-
-                    for (let i = connectionsModel.count - 1; i >= 0; --i) {
-                        if (connectionsModel.get(i).sourceId === activeSourceNode.effectId &&
-                            connectionsModel.get(i).targetType === "audio_bus") {
-                            connectionsModel.remove(i);
-                        }
-                    }
-
-                    connectionsModel.append({
-                        "sourceId": activeSourceNode.effectId,
-                        "targetId": busId,
-                        "sourceType": "effect_out",
-                        "targetType": "audio_bus"
-                    });
-                } else {
-                    for (let i = 0; i < connectionsModel.count; ++i) {
-                        if (connectionsModel.get(i).targetId === targetNode.effectId) return;
-                    }
-
-                    connectionsModel.append({
-                        "sourceId": activeSourceNode.controlId || activeSourceNode.effectId,
-                        "targetId": targetNode.effectId,
-                        "sourceType": activePortType,
-                        "targetType": portType
-                    });
-                }
-            }
-            resetRoutingState();
+        // Clean up or adjust current active selection indices safely
+        if (selectedBus === busIndex && selectedSlot === slotIndex) {
+            selectedBus = -1;
+            selectedSlot = -1;
+        } else if (selectedBus === busIndex && selectedSlot > slotIndex) {
+            selectedSlot--;
         }
 
-        function findPinAt(point) {
-            if (workspace.activePortType === "effect_out" && busPanel) {
-                let busTarget = busPanel.getBusPinAt(point, workspace);
-                if (busTarget) {
-                    return { node: busTarget, pin: busTarget.pin, type: "effect_out" };
-                }
-            }
+        matrixRevision++;
+    }
 
-            if (standaloneControlInput && standaloneControlInput.outputPin && standaloneControlInput.outputPin.visible) {
-                let pin = standaloneControlInput.outputPin;
-                let pos = pin.mapToItem(workspace, 0, 0);
-                if (point.x >= pos.x && point.x <= pos.x + pin.width &&
-                    point.y >= pos.y && point.y <= pos.y + pin.height) {
-                    return { node: standaloneControlInput, pin: pin, type: "control" };
-                }
-            }
+    function updateBusEffectValue(busIndex, slotIndex, newValue) {
+        let matrixCopy = busEffectsMatrix.slice();
+        let busChain = matrixCopy[busIndex].slice();
 
-            for (let i = 0; i < canvasEffectsModel.count; ++i) {
-                let node = findNodeItem("effect_" + i);
-                if (!node) continue;
+        if (!busChain[slotIndex]) return;
+        busChain[slotIndex].value = newValue;
+        matrixCopy[busIndex] = busChain;
+        busEffectsMatrix = matrixCopy;
+        matrixRevision++;
+    }
 
-                if (node.inputPin && node.inputPin.visible) {
-                    let pin = node.inputPin;
-                    let pos = pin.mapToItem(workspace, 0, 0);
-                    if (point.x >= pos.x && point.x <= pos.x + pin.width &&
-                        point.y >= pos.y && point.y <= pos.y + pin.height) {
-                        return { node: node, pin: pin, type: "control" };
-                    }
-                }
-            }
-            return null;
+        function updateSelectedEffectProperty(propName, value) {
+            if (selectedBus < 0 || selectedSlot < 0) return;
+            let matrixCopy = busEffectsMatrix.slice();
+            let busChain = matrixCopy[selectedBus].slice();
+            if (!busChain[selectedSlot]) return;
+
+            // FIX: Force a fresh object reference assignment so QML captures the mutation instantly
+            let updatedEffect = Object.assign({}, busChain[selectedSlot]);
+            updatedEffect[propName] = value;
+
+            busChain[selectedSlot] = updatedEffect;
+            matrixCopy[selectedBus] = busChain;
+            busEffectsMatrix = matrixCopy;
+            matrixRevision++;
         }
 
-        function disconnectTarget(targetId) {
-            let removedAny = false;
-            for (let i = connectionsModel.count - 1; i >= 0; --i) {
-                if (connectionsModel.get(i).targetId === targetId || connectionsModel.get(i).sourceId === targetId) {
-                    connectionsModel.remove(i);
-                    removedAny = true;
-                }
-            }
-            if (removedAny) connectionCanvas.requestPaint();
+        function updateSelectedEffectHardwareMap(hwName, targetParam) {
+            if (selectedBus < 0 || selectedSlot < 0) return;
+            let matrixCopy = busEffectsMatrix.slice();
+            let busChain = matrixCopy[selectedBus].slice();
+            if (!busChain[selectedSlot]) return;
+
+            // FIX: Structural copy both the parent container and nested map dictionary definitions
+            let updatedEffect = Object.assign({}, busChain[selectedSlot]);
+            updatedEffect.hardwareMaps = Object.assign({}, updatedEffect.hardwareMaps || {});
+            updatedEffect.hardwareMaps[hwName] = targetParam;
+
+            busChain[selectedSlot] = updatedEffect;
+            matrixCopy[selectedBus] = busChain;
+            busEffectsMatrix = matrixCopy;
+            matrixRevision++;
         }
 
-        function resetRoutingState() {
-            isDrawingLine = false;
-            activeSourceNode = null;
-            activeSourcePin = null;
-            activePortType = "";
-            connectionCanvas.requestPaint();
-        }
+    function saveCurrentAsPreset() {
+        console.log("Preset save requested:", JSON.stringify(serializeGraph()));
+        statusToast.show("Preset saved");
+    }
 
-        function serializeGraph() {
-            let jsonPayload = {
-                "audio_buses": []
-            };
+    // Restore a previously serialised graph snapshot back into the workspace
+    function loadPreset(payload) {
+        if (!payload) return;
 
-            // Changed: Loop through 0, 1, 2 to match your model: 3 correctly
-            for (let b = 0; b < 3; ++b) {
-                let busId = "bus_" + b;
-                let busEnabled = busPanel.isBusEnabled(busId);
-                let busObj = { "id": busId, "enabled": busEnabled, "effects": [] };
+        // Restore main volume if present
+        if (payload.main_volume !== undefined)
+            mainVolume = payload.main_volume;
 
-                for (let c = 0; c < connectionsModel.count; ++c) {
-                    let conn = connectionsModel.get(c);
-                    if (conn.targetId === busId && conn.targetType === "audio_bus") {
-                        let effectId = conn.sourceId;
-                        let idx = parseInt(effectId.replace("effect_", ""));
+        // Clear selection first
+        selectedBus  = -1;
+        selectedSlot = -1;
 
-                        if (idx >= 0 && idx < canvasEffectsModel.count) {
-                            let effect = canvasEffectsModel.get(idx);
-                            let connectedControlId = "";
+        let newMatrix = [];
+        let buses = payload.audio_buses || [];
 
-                            for (let k = 0; k < connectionsModel.count; ++k) {
-                                let ctrlConn = connectionsModel.get(k);
-                                if (ctrlConn.targetId === effectId && ctrlConn.targetType === "control") {
-                                    connectedControlId = ctrlConn.sourceId;
+        for (let b = 0; b < 4; b++) {
+            let busData = buses[b];
+            let chain   = [];
+
+            if (busData && busData.effects) {
+                for (let e = 0; e < busData.effects.length; e++) {
+                    let ef = busData.effects[e];
+
+                    // Rebuild the hardware maps from the parameters array
+                    let hwMaps = {
+                        "Rotary":  "None",
+                        "Button":  "None",
+                        "Laser-1": "None",
+                        "Laser-2": "None",
+                        "Laser-3": "None"
+                    };
+
+                    let primaryValue = 50;
+                    let effectEnabled = ef.enabled !== false;
+
+                    let reverseHwId = {
+                        "rotary_0": "Rotary",
+                        "button":   "Button",
+                        "laser_1":  "Laser-1",
+                        "laser_2":  "Laser-2",
+                        "laser_3":  "Laser-3"
+                    };
+
+                    if (ef.parameters) {
+                        for (let p = 0; p < ef.parameters.length; p++) {
+                            let param = ef.parameters[p];
+                            if (param.key === "enabled") {
+                                effectEnabled = param.value !== 0;
+                                if (param.input_control_id && param.input_control_id !== "") {
+                                    let hwName = reverseHwId[param.input_control_id] || param.input_control_id;
+                                    hwMaps[hwName] = "Enabled";
+                                }
+                            } else {
+                                // Reverse the gain 32767 → 100 normalisation
+                                let v = param.value;
+                                if (param.key === "gain" && v === 32767) v = 100;
+                                primaryValue = v;
+
+                                if (param.input_control_id && param.input_control_id !== "") {
+                                    let hwName = reverseHwId[param.input_control_id] || param.input_control_id;
+                                    let targetLabel = "Gain";
+                                    if (ef.effect_type === "low_pass_filter") targetLabel = "Cutoff";
+                                    else if (ef.effect_type === "reverb")     targetLabel = "Room Size";
+                                    else if (ef.effect_type === "delay")      targetLabel = "Time";
+                                    hwMaps[hwName] = targetLabel;
                                 }
                             }
-
-                            // Map the correct parameter keys
-                            let paramKey = "gain";
-                            if (effect.type === "low_pass_filter") paramKey = "cutoff";
-                            else if (effect.type === "reverb") paramKey = "room_size";
-                            else if (effect.type === "delay") paramKey = "time";
-
-                            busObj.effects.push({
-                                "effect_type": effect.type,
-                                "mix": 100,
-                                "parameters": [
-                                    {
-                                        "key": effect.parameterKey || paramKey,
-                                        "value": parseInt(effect.value, 10),
-                                        "input_control_id": connectedControlId
-                                    }
-                                ]
-                            });
                         }
                     }
-                }
-                jsonPayload.audio_buses.push(busObj);
-            }
 
-            console.log("Generated DSP Topology:", JSON.stringify(jsonPayload, null, 2));
-            return jsonPayload;
-        }
-
-        function transmitGraphData(payload) {
-            interfaceBridge.sendGraphData(JSON.stringify(payload));
-        }
-
-        function findNodeItem(id) {
-            if (standaloneControlInput.controlId === id || standaloneControlInput.id === id) {
-                return standaloneControlInput;
-            }
-            for (let i = 0; i < workspace.children.length; ++i) {
-                let child = workspace.children[i];
-                if (child.item && child.item.effectId === id) {
-                    return child.item;
-                }
-            }
-            return null;
-        }
-
-        MouseArea {
-            id: trackingArea
-            anchors.fill: parent
-            enabled: workspace.isDrawingLine
-            visible: workspace.isDrawingLine
-            hoverEnabled: true
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            z: 100
-
-            onPositionChanged: (mouse) => {
-                workspace.currentMousePos = Qt.point(mouse.x, mouse.y);
-                connectionCanvas.requestPaint();
-            }
-
-            onPressed: (mouse) => {
-                if (mouse.button === Qt.RightButton) {
-                    workspace.resetRoutingState();
-                    return;
-                }
-
-                let target = workspace.findPinAt(Qt.point(mouse.x, mouse.y));
-                if (target && target.type === workspace.activePortType) {
-                    workspace.completeConnection(target.node, target.pin, target.type);
-                } else {
-                    workspace.resetRoutingState();
-                }
-            }
-        }
-
-        Canvas {
-            id: connectionCanvas
-            anchors.fill: parent
-            z: 1
-
-            onPaint: {
-                let ctx = getContext("2d");
-                ctx.clearRect(0, 0, width, height);
-                ctx.lineWidth = 3;
-
-                for (let i = 0; i < connectionsModel.count; ++i) {
-                    let connection = connectionsModel.get(i);
-
-                    if (connection.targetType === "audio_bus") {
-                        ctx.strokeStyle = "#bb9af7";
-                        let sourceModule = workspace.findNodeItem(connection.sourceId);
-                        if (sourceModule) {
-                            let srcPin = sourceModule.outputPin ? sourceModule.outputPin : sourceModule;
-                            let p1 = srcPin.mapToItem(workspace, srcPin.width / 2, srcPin.height / 2);
-                            let p2 = busPanel.getBusPinById(connection.targetId, workspace);
-
-                            if (p2) {
-                                ctx.beginPath();
-                                ctx.moveTo(p1.x, p1.y);
-                                ctx.bezierCurveTo(p1.x + 80, p1.y, p2.x - 80, p2.y, p2.x, p2.y);
-                                ctx.stroke();
+                    // find the matching module descriptor from your ModuleRegistry singleton
+                    let registryModule = null;
+                    if (typeof ModuleRegistry !== "undefined" && ModuleRegistry.modules) {
+                        for (let m = 0; m < ModuleRegistry.modules.length; m++) {
+                            if (ModuleRegistry.modules[m].effectType === ef.effect_type) {
+                                registryModule = ModuleRegistry.modules[m];
+                                break;
                             }
                         }
-                    } else {
-                        ctx.strokeStyle = "#7aa2f7";
-                        let sourceModule = workspace.findNodeItem(connection.sourceId);
-                        let targetModule = workspace.findNodeItem(connection.targetId);
-                        if (sourceModule && targetModule) {
-                            let srcPin = sourceModule.outputPin ? sourceModule.outputPin : sourceModule;
-                            let tgtPin = targetModule.inputPin ? targetModule.inputPin : targetModule;
+                    }
 
-                            let p1 = srcPin.mapToItem(workspace, srcPin.width / 2, srcPin.height / 2);
-                            let p2 = tgtPin.mapToItem(workspace, tgtPin.width / 2, tgtPin.height / 2);
+                    let fullQmlSource = registryModule.qmlSource;
 
-                            ctx.beginPath();
-                            ctx.moveTo(p1.x, p1.y);
-                            ctx.bezierCurveTo(p1.x + 50, p1.y, p2.x - 50, p2.y, p2.x, p2.y);
-                            ctx.stroke();
+                    chain.push({
+                        "type":        ef.effect_type,
+                        "displayName": registryModule.displayName,
+                        "qmlSource":   fullQmlSource,
+                        "value":       primaryValue,
+                        "enabled":     effectEnabled,
+                        "hardwareMaps": hwMaps
+                    });
+                }
+            }
+
+            // Always terminate each chain with a null drop-target slot
+            chain.push(null);
+            newMatrix.push(chain);
+        }
+
+        busEffectsMatrix = newMatrix;
+        matrixRevision++;
+    }
+
+    function serializeGraph() {
+        let jsonPayload = { "main_volume": mainVolume, "audio_buses": [] };
+
+        for (let b = 0; b < busRepeaterMain.count; ++b) {
+            let busItem = busRepeaterMain.itemAt(b);
+            let busObj = {
+                "id": "bus_" + b,
+                "enabled": busItem ? busItem.busSwitchChecked : true,
+                "effects": []
+            };
+
+            let chain = busEffectsMatrix[b];
+            for (let s = 0; s < chain.length; s++) {
+                let effect = chain[s];
+                if (effect) { // skip trailing structural nulls
+                    let paramKey = "gain";
+                    if (effect.type === "low_pass_filter") paramKey = "cutoff";
+                    else if (effect.type === "reverb") paramKey = "room_size";
+                    else if (effect.type === "delay") paramKey = "time";
+                    else if (effect.type === "gain") paramKey = "gain";
+
+                    // Scan the hardware configurations for active routing targets
+                    let primaryInputControlId = "";
+                    let enabledInputControlId = "";
+                    let hardwareMaps = effect.hardwareMaps || {};
+
+                    for (let hwName in hardwareMaps) {
+                        let target = hardwareMaps[hwName];
+                        let lowerName = hwName.toLowerCase();
+                        let normalizedId = lowerName;
+
+                        // Normalize standard component names to lower_snake_case
+                        if (lowerName === "rotary") {
+                            normalizedId = "rotary_0";
+                        } else if (lowerName.startsWith("laser-")) {
+                            normalizedId = lowerName.replace("-", "_");
+                        }
+
+                        if (target === "Enabled") {
+                            enabledInputControlId = normalizedId;
+                        } else if (target !== "None" && target !== "") {
+                            primaryInputControlId = normalizedId;
                         }
                     }
-                }
 
-                if (workspace.isDrawingLine && workspace.activeSourcePin) {
-                    let startPos = workspace.activeSourcePin.mapToItem(workspace, workspace.activeSourcePin.width / 2, workspace.activeSourcePin.height / 2);
-                    ctx.strokeStyle = workspace.activePortType === "effect_out" ? "#bb9af7" : "#ff007c";
-                    ctx.beginPath();
-                    ctx.moveTo(startPos.x, startPos.y);
-                    ctx.bezierCurveTo(startPos.x + 50, startPos.y, workspace.currentMousePos.x - 50, workspace.currentMousePos.y, workspace.currentMousePos.x, workspace.currentMousePos.y);
-                    ctx.stroke();
-                }
-            }
-        }
+                    // Handle peak integer constraints (e.g. mapping 100% UI to 32767 scale value)
+                    let finalValue = Math.round(effect.value);
+                    if (paramKey === "gain" && finalValue === 100) {
+                        finalValue = 32767;
+                    }
 
-        DropArea {
-            id: workspaceDropArea
-            anchors.fill: parent
-            keys: typeof ModuleRegistry !== "undefined" ? ModuleRegistry.modules.map(m => m.effectType) : []
-
-            onDropped: (drop) => {
-                let src = drop.source;
-                let targetX = drop.x - (src.width / 2);
-                let targetY = drop.y - (src.height / 2);
-                if (drop.y > fxPanel.y && drop.x < (fxPanel.x + fxPanel.width)) {
-                    drop.action = Qt.IgnoreAction;
-                    return;
-                }
-
-                canvasEffectsModel.append({
-                    "type": src.effectType,
-                    "value": src.defaultValue,
-                    "qmlSource": src.qmlSource,
-                    "posX": targetX,
-                    "posY": targetY
-                });
-                drop.accept();
-            }
-        }
-
-        Repeater {
-            model: canvasEffectsModel
-            delegate: Loader {
-                id: moduleLoader
-                x: model.posX
-                y: model.posY
-
-                onXChanged: connectionCanvas.requestPaint()
-                onYChanged: connectionCanvas.requestPaint()
-
-                source: typeof ModuleRegistry !== "undefined" ? "./modules/" + model.qmlSource : ""
-                Drag.active: dragSpaceArea.drag.active
-
-                MouseArea {
-                    id: dragSpaceArea
-                    anchors.fill: parent
-                    drag.target: parent
-
-                    onReleased: {
-                        if (dragSpaceArea.drag.active) {
-                            model.posX = parent.x;
-                            model.posY = parent.y;
-                            connectionCanvas.requestPaint();
+                    // Build parameters array holding both the target lane configuration and bypass lane routing
+                    let parametersArray = [
+                        {
+                            "key": paramKey,
+                            "value": finalValue,
+                            "input_control_id": primaryInputControlId
+                        },
+                        {
+                            "key": "enabled",
+                            "value": (effect.enabled !== false) ? 1 : 0,
+                            "input_control_id": enabledInputControlId
                         }
-                    }
-                }
+                    ];
 
-                onLoaded: {
-                    if (item.hasOwnProperty("isSourceTile")) item.isSourceTile = false;
-                    if (item.hasOwnProperty("effectId")) item.effectId = "effect_" + index;
-                    if (item.hasOwnProperty("router")) item.router = workspace;
-                    if (item.removeRequested) {
-                        item.removeRequested.connect(() => {
-                            workspace.disconnectTarget("effect_" + index);
-                            canvasEffectsModel.remove(index);
-                        });
-                    }
+                    busObj.effects.push({
+                        "effect_type": effect.type === "low_pass_filter" ? "low_pass_filter" : effect.type,
+                        "enabled": effect.enabled !== false,
+                        "mix": 100,
+                        "parameters": parametersArray
+                    });
                 }
             }
+            jsonPayload.audio_buses.push(busObj);
         }
+
+        console.log("Generated DSP Topology:", JSON.stringify(jsonPayload, null, 2));
+        return jsonPayload;
     }
 
-    Control_input {
-        id: standaloneControlInput
+    function transmitGraphData(payload) {
+        interfaceBridge.sendGraphData(JSON.stringify(payload));
+        statusToast.show("Sent to Guitar");
+    }
+
+    // ---- Top header bar ----
+    Rectangle {
+        id: headerBar
         anchors.top: parent.top
         anchors.left: parent.left
-        anchors.margins: 20
-        router: workspace
-    }
-
-    Effects_panel {
-        id: fxPanel
-        anchors.bottom: parent.bottom
-        anchors.left: parent.left
-        anchors.margins: 20
-        workspace: workspace
-    }
-
-    Bus_panel {
-        id: busPanel
         anchors.right: parent.right
-        anchors.top: parent.top
-        workspace: workspace
-    }
-
-    Item {
-        id: statusContainer
-        anchors.bottom: parent.bottom
-        anchors.right: parent.right
-        anchors.margins: 20
-        width: statusLayout.implicitWidth
-        height: statusLayout.implicitHeight
-        z: 110
+        height: 70
+        color: "#0a0a0f"
 
         RowLayout {
-            id: statusLayout
             anchors.fill: parent
-            spacing: 8
-
-            Rectangle {
-                width: 12
-                height: 12
-                radius: 6
-                color: interfaceBridge.isConnected ? "#9ece6a" : "#f7768e"
-                Layout.alignment: Qt.AlignVCenter
-
-                Behavior on color { ColorAnimation { duration: 200 } }
-            }
+            anchors.leftMargin: 20
+            anchors.rightMargin: 20
+            spacing: 20
 
             Text {
-                text: interfaceBridge.isConnected ? "Connected to Rust DSP" : "Disconnected (Click to retry)"
-                color: "#c0caf5"
-                font.pixelSize: 14
+                text: "AUDIO ROUTER"
+                color: "white"
+                font.pixelSize: 30
                 font.bold: true
-                Layout.alignment: Qt.AlignVCenter
+                font.family: "monospace"
+                font.letterSpacing: 2
             }
-        }
 
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-                if (!interfaceBridge.isConnected) {
-                    interfaceBridge.connectToServer();
+            Item { Layout.fillWidth: true }
+
+            Rectangle {
+                Layout.preferredWidth: 320
+                Layout.preferredHeight: 44
+                color: "transparent"
+                border.color: "#3b4261"
+                radius: 8
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 18
+                    anchors.rightMargin: 18
+                    spacing: 14
+
+                    Text {
+                        text: "Main Volume"
+                        color: "white"
+                        font.pixelSize: 13
+                        font.bold: true
+                        font.family: "monospace"
+                    }
+
+                    Slider {
+                        id: mainVolumeSlider
+                        from: 0
+                        to: 100
+                        value: rootWindow.mainVolume
+                        Layout.fillWidth: true
+
+                        background: Rectangle {
+                            x: mainVolumeSlider.leftPadding
+                            y: mainVolumeSlider.topPadding + mainVolumeSlider.availableHeight / 2 - height / 2
+                            width: mainVolumeSlider.availableWidth
+                            height: 4
+                            radius: 2
+                            color: "#3b4261"
+
+                            Rectangle {
+                                width: mainVolumeSlider.visualPosition * parent.width
+                                height: parent.height
+                                color: "white"
+                                radius: 2
+                            }
+                        }
+
+                        handle: Rectangle {
+                            x: mainVolumeSlider.leftPadding + mainVolumeSlider.visualPosition * (mainVolumeSlider.availableWidth - width)
+                            y: mainVolumeSlider.topPadding + mainVolumeSlider.availableHeight / 2 - height / 2
+                            width: 16
+                            height: 16
+                            radius: 8
+                            color: "#ff007c"
+                            border.color: "white"
+                            border.width: 2
+                        }
+
+                        onMoved: rootWindow.mainVolume = value
+                    }
+                }
+            }
+
+            Button {
+                id: sendButton
+                Layout.preferredWidth: 170
+                Layout.preferredHeight: 44
+
+                background: Rectangle {
+                    color: sendButton.hovered ? "#e5006e" : "#ff007c"
+                    radius: 22
+                }
+
+                contentItem: Text {
+                    text: "SEND TO GUITAR"
+                    color: "white"
+                    font.pixelSize: 13
+                    font.bold: true
+                    font.family: "monospace"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                onClicked: {
+                    let activeGraph = rootWindow.serializeGraph();
+                    rootWindow.transmitGraphData(activeGraph);
+                }
+            }
+
+            RowLayout {
+                spacing: 8
+                Layout.alignment: Qt.AlignVCenter
+
+                Rectangle {
+                    width: 10
+                    height: 10
+                    radius: 5
+                    color: interfaceBridge.isConnected ? "#9ece6a" : "#f7768e"
+                    Layout.alignment: Qt.AlignVCenter
+                    Behavior on color { ColorAnimation { duration: 200 } }
+                }
+
+                Text {
+                    text: interfaceBridge.isConnected ? "Connected to Rust DSP" : "Disconnected (Click to retry)"
+                    color: "#565f89"
+                    font.pixelSize: 11
+                    font.family: "monospace"
+                    Layout.alignment: Qt.AlignVCenter
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (!interfaceBridge.isConnected) {
+                                interfaceBridge.connectToServer();
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
-    // 2. Send Button (Shifted up slightly to sit on top of the status indicator)
-    Button {
-        id: sendButton
+    // ---- Main content row ----
+    RowLayout {
+        anchors.top: headerBar.bottom
+        anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: statusContainer.top // Anchored to the top of the status text
-        anchors.rightMargin: 20
-        anchors.bottomMargin: 12            // 12px vertical gap between button and text
-        width: 160
-        height: 45
-        z: 110
+        anchors.bottom: parent.bottom
+        anchors.margins: 20
+        spacing: 20
 
-        background: Rectangle {
-            color: sendButton.hovered ? "#e5006e" : "#ff007c"
-            radius: parent.height / 2
+        ColumnLayout {
+            Layout.minimumWidth: 270
+            Layout.maximumWidth: 270
+            Layout.preferredWidth: 270
+
+            Layout.fillHeight: true
+            spacing: 20
+
+            Effects_panel {
+                id: fxPanel
+                Layout.fillWidth: true
+                workspace: rootWindow
+            }
+
+            PresetsPanel {
+                id: presetsPanel
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                workspace: rootWindow
+            }
         }
 
-        contentItem: Text {
-            text: "Send to Guitar"
-            color: sendButton.hovered ? "white" : "#1a1b26"
-            font.pixelSize: 14
+        // ---- Center routing panel ----
+        Rectangle {
+            id: routingPanel
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            color: "#0d0d12"
+            border.color: "#24283b"
+            radius: 8
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 24
+                spacing: 12
+
+                Item { Layout.fillHeight: true; Layout.preferredHeight: 1 }
+
+                Repeater {
+                    id: busRepeaterMain
+                    model: 4
+
+                    delegate: BusSlot {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 110
+                        busIndex: index
+                        workspace: rootWindow
+                    }
+                }
+
+                Item { Layout.fillHeight: true; Layout.preferredHeight: 1 }
+            }
+        }
+
+        ConfigPanel {
+            id: configPanel
+            Layout.preferredWidth: 360
+            Layout.fillHeight: true
+            workspace: rootWindow
+        }
+    }
+
+    Rectangle {
+        id: statusToast
+        property bool visibleFlag: false
+        function show(msg) {
+            toastText.text = msg;
+            visibleFlag = true;
+            toastTimer.restart();
+        }
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: 30
+        width: toastText.implicitWidth + 32
+        height: 38
+        radius: 19
+        color: "#16161E"
+        border.color: "#9ece6a"
+        opacity: visibleFlag ? 1 : 0
+        visible: opacity > 0
+        z: 200
+
+        Behavior on opacity { NumberAnimation { duration: 200 } }
+
+        Text {
+            id: toastText
+            anchors.centerIn: parent
+            color: "#9ece6a"
+            font.pixelSize: 12
             font.bold: true
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+            font.family: "monospace"
         }
 
-        onClicked: (mouse) => {
-            let activeGraph = workspace.serializeGraph();
-            workspace.transmitGraphData(activeGraph);
+        Timer {
+            id: toastTimer
+            interval: 1800
+            onTriggered: statusToast.visibleFlag = false
         }
     }
 }
