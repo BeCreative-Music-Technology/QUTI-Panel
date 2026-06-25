@@ -21,7 +21,11 @@ Item {
         border.width: 1
         radius: 6
 
-        Behavior on border.color { ColorAnimation { duration: 120 } }
+        Behavior on border.color {
+            ColorAnimation {
+                duration: 120
+            }
+        }
 
         Text {
             anchors.centerIn: parent

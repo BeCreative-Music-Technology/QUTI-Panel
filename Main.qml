@@ -14,27 +14,41 @@ ApplicationWindow {
     title: "Audio Router"
     color: "#0a0a0f"
 
-    property var busEffectsMatrix: [ [null], [null], [null], [null] ]
+    property var busEffectsMatrix: [[null], [null], [null], [null]]
     property int matrixRevision: 0
     property real mainVolume: 80
 
-    // Global active selection tracking
+    property int valueRevision: 0
     property int selectedBus: -1
     property int selectedSlot: -1
-    readonly property var selectedEffect: (selectedBus >= 0 && selectedSlot >= 0 && busEffectsMatrix[selectedBus]) ? busEffectsMatrix[selectedBus][selectedSlot] : null
+    readonly property var selectedEffect: (selectedBus >= 0 && selectedSlot >= 0 && busEffectsMatrix[selectedBus] && valueRevision >= 0) ? busEffectsMatrix[selectedBus][selectedSlot] : null
 
+    /**
+
+    Instantiates or overwrites an audio effect module within a specific slot of a bus.
+    Deep-copies the targeted bus chain to safely update the QML matrix property,
+    appends a trailing 'null' slot if a new element is added to allow for future drops,
+    and increments 'matrixRevision' to notify binding expressions.
+
+    */
     function setBusEffect(busIndex, slotIndex, moduleInfo) {
         let matrixCopy = busEffectsMatrix.slice();
         let busChain = matrixCopy[busIndex].slice();
 
-        // Enforce basic parameters and an empty mapping dictionary on drop
         busChain[slotIndex] = {
             "type": moduleInfo.type,
             "displayName": moduleInfo.displayName,
             "qmlSource": moduleInfo.qmlSource,
             "value": moduleInfo.value,
+            "mix": 100,
             "enabled": true,
-            "hardwareMaps": { "Rotary": "None", "Button": "None", "Laser-1": "None", "Laser-2": "None", "Laser-3": "None" }
+            "hardwareMaps": {
+                "Rotary": "None",
+                "Button": "None",
+                "Laser-1": "None",
+                "Laser-2": "None",
+                "Laser-3": "None"
+            }
         };
 
         if (slotIndex === busChain.length - 1) {
@@ -46,6 +60,12 @@ ApplicationWindow {
         matrixRevision++;
     }
 
+    /**
+        Removes an effect module from a specific bus slot and shifts subsequent effects down.
+        Maintains a trailing 'null' slot placeholder for the user interface layout,
+        safely updates dynamic selection indices to avoid referencing non-existent slots,
+        and increments 'matrixRevision' to force UI view updates.
+    */
     function clearBusEffect(busIndex, slotIndex) {
         let matrixCopy = busEffectsMatrix.slice();
         let busChain = matrixCopy[busIndex].slice();
@@ -58,7 +78,6 @@ ApplicationWindow {
         matrixCopy[busIndex] = busChain;
         busEffectsMatrix = matrixCopy;
 
-        // Clean up or adjust current active selection indices safely
         if (selectedBus === busIndex && selectedSlot === slotIndex) {
             selectedBus = -1;
             selectedSlot = -1;
@@ -68,127 +87,163 @@ ApplicationWindow {
 
         matrixRevision++;
     }
-
+    /**
+        Updates the primary parameter value for a specific effect module in real time.
+        Shallow-copies the targeted effect configuration object inside the matrix to apply
+        the change safely, then increments 'valueRevision' to break read caches and
+        force dependent QML visual components to re-evaluate their bindings.
+        */
     function updateBusEffectValue(busIndex, slotIndex, newValue) {
-        let matrixCopy = busEffectsMatrix.slice();
-        let busChain = matrixCopy[busIndex].slice();
+        if (!busEffectsMatrix[busIndex] || !busEffectsMatrix[busIndex][slotIndex])
+            return;
+        let updatedEffect = Object.assign({}, busEffectsMatrix[busIndex][slotIndex]);
+        updatedEffect.value = newValue;
+        busEffectsMatrix[busIndex][slotIndex] = updatedEffect;
+        valueRevision++;
+    }
 
-        if (!busChain[slotIndex]) return;
-        busChain[slotIndex].value = newValue;
-        matrixCopy[busIndex] = busChain;
+    /**
+        Modifies a specific arbitrary property on the currently focused or selected effect module.
+        Used by the sidebar controls to alter general metadata fields like 'mix' or 'enabled' states.
+        Immutably reconstructs the target matrix chain and increments both 'matrixRevision'
+        and 'valueRevision' to ensure global interface synchronization.
+    */
+    function updateSelectedEffectProperty(propName, value) {
+        if (selectedBus < 0 || selectedSlot < 0)
+            return;
+        let matrixCopy = busEffectsMatrix.slice();
+        let busChain = matrixCopy[selectedBus].slice();
+        if (!busChain[selectedSlot])
+            return;
+
+        let updatedEffect = Object.assign({}, busChain[selectedSlot]);
+        updatedEffect[propName] = value;
+
+        busChain[selectedSlot] = updatedEffect;
+        matrixCopy[selectedBus] = busChain;
+        busEffectsMatrix = matrixCopy;
+        matrixRevision++;
+        valueRevision++;
+    }
+
+    /**
+        Maps a physical hardware control interface component to an internal parameters macro.
+        Injects a targeted control string into the selected effect's hardware mapping dictionary,
+        linking elements like rotary dials or laser sensors directly to properties like cutoff,
+        room size, or gain, before updating the matrix revision.
+    */
+    function updateSelectedEffectHardwareMap(hwName, targetParam) {
+        if (selectedBus < 0 || selectedSlot < 0)
+            return;
+        let matrixCopy = busEffectsMatrix.slice();
+        let busChain = matrixCopy[selectedBus].slice();
+        if (!busChain[selectedSlot])
+            return;
+
+        let updatedEffect = Object.assign({}, busChain[selectedSlot]);
+        updatedEffect.hardwareMaps = Object.assign({}, updatedEffect.hardwareMaps || {});
+        updatedEffect.hardwareMaps[hwName] = targetParam;
+
+        busChain[selectedSlot] = updatedEffect;
+        matrixCopy[selectedBus] = busChain;
         busEffectsMatrix = matrixCopy;
         matrixRevision++;
     }
 
-        function updateSelectedEffectProperty(propName, value) {
-            if (selectedBus < 0 || selectedSlot < 0) return;
-            let matrixCopy = busEffectsMatrix.slice();
-            let busChain = matrixCopy[selectedBus].slice();
-            if (!busChain[selectedSlot]) return;
-
-            // FIX: Force a fresh object reference assignment so QML captures the mutation instantly
-            let updatedEffect = Object.assign({}, busChain[selectedSlot]);
-            updatedEffect[propName] = value;
-
-            busChain[selectedSlot] = updatedEffect;
-            matrixCopy[selectedBus] = busChain;
-            busEffectsMatrix = matrixCopy;
-            matrixRevision++;
-        }
-
-        function updateSelectedEffectHardwareMap(hwName, targetParam) {
-            if (selectedBus < 0 || selectedSlot < 0) return;
-            let matrixCopy = busEffectsMatrix.slice();
-            let busChain = matrixCopy[selectedBus].slice();
-            if (!busChain[selectedSlot]) return;
-
-            // FIX: Structural copy both the parent container and nested map dictionary definitions
-            let updatedEffect = Object.assign({}, busChain[selectedSlot]);
-            updatedEffect.hardwareMaps = Object.assign({}, updatedEffect.hardwareMaps || {});
-            updatedEffect.hardwareMaps[hwName] = targetParam;
-
-            busChain[selectedSlot] = updatedEffect;
-            matrixCopy[selectedBus] = busChain;
-            busEffectsMatrix = matrixCopy;
-            matrixRevision++;
-        }
+    /**
+        Serializes the entire active mixer layout graph state into a JSON string payload.
+        Logs the output dataset directly to the standard debugging terminal and triggers
+        a timed, on-screen status toast confirmation notifying the user that the preset is safe.
+    */
 
     function saveCurrentAsPreset() {
         console.log("Preset save requested:", JSON.stringify(serializeGraph()));
         statusToast.show("Preset saved");
     }
 
-    // Restore a previously serialised graph snapshot back into the workspace
+    /**
+        Parses a raw hardware engine data payload and dynamically builds out the interface state.
+        Resets existing selection focal points, normalizes raw 16-bit unsigned integer data from the
+        DSP engine back into native UI percentages or frequencies, maps elements back to their
+        original registry source structures, and signals a global matrix revision change.
+        */
     function loadPreset(payload) {
-        if (!payload) return;
+        if (!payload)
+            return;
 
-        // Restore main volume if present
         if (payload.main_volume !== undefined)
-            mainVolume = payload.main_volume;
+            mainVolume = Math.round((payload.main_volume / 65535) * 100);
 
-        // Clear selection first
-        selectedBus  = -1;
+        selectedBus = -1;
         selectedSlot = -1;
-
         let newMatrix = [];
         let buses = payload.audio_buses || [];
 
         for (let b = 0; b < 4; b++) {
             let busData = buses[b];
-            let chain   = [];
+            let chain = [];
 
             if (busData && busData.effects) {
                 for (let e = 0; e < busData.effects.length; e++) {
                     let ef = busData.effects[e];
 
-                    // Rebuild the hardware maps from the parameters array
                     let hwMaps = {
-                        "Rotary":  "None",
-                        "Button":  "None",
+                        "Rotary": "None",
+                        "Button": "None",
                         "Laser-1": "None",
                         "Laser-2": "None",
                         "Laser-3": "None"
                     };
 
                     let primaryValue = 50;
+                    let effectMix = ef.mix !== undefined ? Math.round((ef.mix / 65535) * 100) : 100;
                     let effectEnabled = ef.enabled !== false;
-
                     let reverseHwId = {
                         "rotary_0": "Rotary",
-                        "button":   "Button",
-                        "laser_1":  "Laser-1",
-                        "laser_2":  "Laser-2",
-                        "laser_3":  "Laser-3"
+                        "button": "Button",
+                        "laser_1": "Laser-1",
+                        "laser_2": "Laser-2",
+                        "laser_3": "Laser-3"
                     };
 
                     if (ef.parameters) {
                         for (let p = 0; p < ef.parameters.length; p++) {
                             let param = ef.parameters[p];
+
                             if (param.key === "enabled") {
                                 effectEnabled = param.value !== 0;
                                 if (param.input_control_id && param.input_control_id !== "") {
                                     let hwName = reverseHwId[param.input_control_id] || param.input_control_id;
                                     hwMaps[hwName] = "Enabled";
                                 }
+                            } else if (param.key === "mix") {
+                                effectMix = Math.round((param.value / 65535) * 100);
                             } else {
-                                // Reverse the gain 32767 → 100 normalisation
                                 let v = param.value;
-                                if (param.key === "gain" && v === 32767) v = 100;
-                                primaryValue = v;
+                                if (ef.effect_type === "low_pass_filter") {
+                                    let hzPct = v / 65535;
+                                    primaryValue = 20 + hzPct * (20000 - 20);
+                                } else if (ef.effect_type === "gain" || ef.effect_type === "reverb" || ef.effect_type === "delay") {
+                                    primaryValue = (v / 65535) * 100;
+                                } else {
+                                    primaryValue = v;
+                                }
 
                                 if (param.input_control_id && param.input_control_id !== "") {
                                     let hwName = reverseHwId[param.input_control_id] || param.input_control_id;
                                     let targetLabel = "Gain";
-                                    if (ef.effect_type === "low_pass_filter") targetLabel = "Cutoff";
-                                    else if (ef.effect_type === "reverb")     targetLabel = "Room Size";
-                                    else if (ef.effect_type === "delay")      targetLabel = "Time";
+                                    if (ef.effect_type === "low_pass_filter")
+                                        targetLabel = "Cutoff";
+                                    else if (ef.effect_type === "reverb")
+                                        targetLabel = "Room Size";
+                                    else if (ef.effect_type === "delay")
+                                        targetLabel = "Time";
                                     hwMaps[hwName] = targetLabel;
                                 }
                             }
                         }
                     }
 
-                    // find the matching module descriptor from your ModuleRegistry singleton
                     let registryModule = null;
                     if (typeof ModuleRegistry !== "undefined" && ModuleRegistry.modules) {
                         for (let m = 0; m < ModuleRegistry.modules.length; m++) {
@@ -199,20 +254,19 @@ ApplicationWindow {
                         }
                     }
 
-                    let fullQmlSource = registryModule.qmlSource;
-
+                    let fullQmlSource = registryModule ? registryModule.qmlSource : "";
                     chain.push({
-                        "type":        ef.effect_type,
-                        "displayName": registryModule.displayName,
-                        "qmlSource":   fullQmlSource,
-                        "value":       primaryValue,
-                        "enabled":     effectEnabled,
+                        "type": ef.effect_type,
+                        "displayName": registryModule ? registryModule.displayName : ef.effect_type.toUpperCase(),
+                        "qmlSource": fullQmlSource,
+                        "value": primaryValue,
+                        "mix": effectMix,
+                        "enabled": effectEnabled,
                         "hardwareMaps": hwMaps
                     });
                 }
             }
 
-            // Always terminate each chain with a null drop-target slot
             chain.push(null);
             newMatrix.push(chain);
         }
@@ -220,39 +274,52 @@ ApplicationWindow {
         busEffectsMatrix = newMatrix;
         matrixRevision++;
     }
-
+    /**
+        Serializes and flattens the frontend QML effect matrix into a strict backend DSP topology.
+        Translates standard operational percentages and cutoff scales into uniform 16-bit unsigned integers,
+        maps specific device control identifiers to their low-level definitions, formats the active parameters array,
+        and returns a structured topology schema payload prepared for transmission to the hardware audio engine.
+    */
     function serializeGraph() {
-        let jsonPayload = { "main_volume": mainVolume, "audio_buses": [] };
+        let mainVolumeU16 = Math.round((mainVolume / 100) * 65535);
+        let jsonPayload = {
+            "main_volume": mainVolumeU16,
+            "audio_buses": []
+        };
 
         for (let b = 0; b < busRepeaterMain.count; ++b) {
             let busItem = busRepeaterMain.itemAt(b);
+            let busEnabled = !!(busItem && busItem.busSwitchChecked); // Sends true or false
+
             let busObj = {
                 "id": "bus_" + b,
-                "enabled": busItem ? busItem.busSwitchChecked : true,
+                "enabled": busEnabled,
                 "effects": []
             };
-
             let chain = busEffectsMatrix[b];
             for (let s = 0; s < chain.length; s++) {
                 let effect = chain[s];
-                if (effect) { // skip trailing structural nulls
-                    let paramKey = "gain";
-                    if (effect.type === "low_pass_filter") paramKey = "cutoff";
-                    else if (effect.type === "reverb") paramKey = "room_size";
-                    else if (effect.type === "delay") paramKey = "time";
-                    else if (effect.type === "gain") paramKey = "gain";
+                if (effect) {
 
-                    // Scan the hardware configurations for active routing targets
+                    let paramKey = "gain";
+                    if (effect.type === "low_pass_filter")
+                        paramKey = "frequency";
+                    else
+                    if (effect.type === "reverb")
+                        paramKey = "room_size";
+                    else if (effect.type === "delay")
+                        paramKey = "frequency";
+                    else if (effect.type === "gain")
+                        paramKey = "gain";
+
                     let primaryInputControlId = "";
                     let enabledInputControlId = "";
                     let hardwareMaps = effect.hardwareMaps || {};
-
                     for (let hwName in hardwareMaps) {
                         let target = hardwareMaps[hwName];
                         let lowerName = hwName.toLowerCase();
                         let normalizedId = lowerName;
 
-                        // Normalize standard component names to lower_snake_case
                         if (lowerName === "rotary") {
                             normalizedId = "rotary_0";
                         } else if (lowerName.startsWith("laser-")) {
@@ -266,13 +333,21 @@ ApplicationWindow {
                         }
                     }
 
-                    // Handle peak integer constraints (e.g. mapping 100% UI to 32767 scale value)
-                    let finalValue = Math.round(effect.value);
-                    if (paramKey === "gain" && finalValue === 100) {
-                        finalValue = 32767;
+                    let finalValue = 0;
+                    if (effect.type === "low_pass_filter") {
+                        let hzPct = (effect.value - 20) / (20000 - 20);
+                        finalValue = Math.round(hzPct * 65535);
+                    } else if (effect.type === "gain" || effect.type === "reverb" || effect.type === "delay") {
+                        finalValue = Math.round((effect.value / 100) * 65535);
+                    } else {
+                        finalValue = Math.round(effect.value);
                     }
 
-                    // Build parameters array holding both the target lane configuration and bypass lane routing
+                    finalValue = Math.min(Math.max(finalValue, 0), 65535);
+
+                    let currentMix = effect.mix !== undefined ? effect.mix : 100;
+                    let finalMixValue = Math.min(Math.max(Math.round((currentMix / 100) * 65535), 0), 65535);
+
                     let parametersArray = [
                         {
                             "key": paramKey,
@@ -280,16 +355,18 @@ ApplicationWindow {
                             "input_control_id": primaryInputControlId
                         },
                         {
-                            "key": "enabled",
-                            "value": (effect.enabled !== false) ? 1 : 0,
-                            "input_control_id": enabledInputControlId
+                            "key": "mix",
+                            "value": finalMixValue,
+                            "input_control_id": ""
                         }
                     ];
 
+                    let effectEnabled = (effect.enabled !== false); // Sends true or false
+
                     busObj.effects.push({
-                        "effect_type": effect.type === "low_pass_filter" ? "low_pass_filter" : effect.type,
-                        "enabled": effect.enabled !== false,
-                        "mix": 100,
+                        "effect_type": effect.type,
+                        "enabled": effectEnabled,
+                        "mix": finalMixValue,
                         "parameters": parametersArray
                     });
                 }
@@ -300,13 +377,11 @@ ApplicationWindow {
         console.log("Generated DSP Topology:", JSON.stringify(jsonPayload, null, 2));
         return jsonPayload;
     }
-
     function transmitGraphData(payload) {
-        interfaceBridge.sendGraphData(JSON.stringify(payload));
-        statusToast.show("Sent to Guitar");
-    }
+            interfaceBridge.sendGraphData(JSON.stringify(payload));
+            statusToast.show("Sent to Guitar");
+        }
 
-    // ---- Top header bar ----
     Rectangle {
         id: headerBar
         anchors.top: parent.top
@@ -330,7 +405,9 @@ ApplicationWindow {
                 font.letterSpacing: 2
             }
 
-            Item { Layout.fillWidth: true }
+            Item {
+                Layout.fillWidth: true
+            }
 
             Rectangle {
                 Layout.preferredWidth: 320
@@ -428,7 +505,11 @@ ApplicationWindow {
                     radius: 5
                     color: interfaceBridge.isConnected ? "#9ece6a" : "#f7768e"
                     Layout.alignment: Qt.AlignVCenter
-                    Behavior on color { ColorAnimation { duration: 200 } }
+                    Behavior on color {
+                        ColorAnimation {
+                            duration: 200
+                        }
+                    }
                 }
 
                 Text {
@@ -452,7 +533,6 @@ ApplicationWindow {
         }
     }
 
-    // ---- Main content row ----
     RowLayout {
         anchors.top: headerBar.bottom
         anchors.left: parent.left
@@ -483,7 +563,6 @@ ApplicationWindow {
             }
         }
 
-        // ---- Center routing panel ----
         Rectangle {
             id: routingPanel
             Layout.fillWidth: true
@@ -497,11 +576,14 @@ ApplicationWindow {
                 anchors.margins: 24
                 spacing: 12
 
-                Item { Layout.fillHeight: true; Layout.preferredHeight: 1 }
+                Item {
+                    Layout.fillHeight: true
+                    Layout.preferredHeight: 1
+                }
 
                 Repeater {
                     id: busRepeaterMain
-                    model: 4
+                    model: 3
 
                     delegate: BusSlot {
                         Layout.fillWidth: true
@@ -511,7 +593,10 @@ ApplicationWindow {
                     }
                 }
 
-                Item { Layout.fillHeight: true; Layout.preferredHeight: 1 }
+                Item {
+                    Layout.fillHeight: true
+                    Layout.preferredHeight: 1
+                }
             }
         }
 
@@ -544,7 +629,11 @@ ApplicationWindow {
         visible: opacity > 0
         z: 200
 
-        Behavior on opacity { NumberAnimation { duration: 200 } }
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 200
+            }
+        }
 
         Text {
             id: toastText

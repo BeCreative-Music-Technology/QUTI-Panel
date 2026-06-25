@@ -10,7 +10,7 @@ Item {
     property string title: ""
     property string effectId: ""
 
-    signal removeRequested()
+    signal removeRequested
     signal valueChanged(int index, real newValue)
 
     anchors.fill: parent

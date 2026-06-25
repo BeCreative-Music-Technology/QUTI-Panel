@@ -9,8 +9,7 @@ Item {
 
     property var workspace: null
 
-    // Dynamic structural binding hooks map changes tracking back to the active array matrix
-    readonly property var currentEffect: (workspace && workspace.matrixRevision >= 0) ? workspace.selectedEffect : null
+    readonly property var currentEffect: (workspace && (workspace.matrixRevision >= 0 || workspace.valueRevision >= 0)) ? workspace.selectedEffect : null
 
     ColumnLayout {
         anchors.fill: parent
@@ -27,7 +26,6 @@ Item {
             horizontalAlignment: Text.AlignHCenter
         }
 
-        // --- SUB-PANEL 1: ACTIVE EFFECT PARAMETERS ---
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 180
@@ -77,7 +75,7 @@ Item {
                             checked: currentEffect ? (currentEffect.enabled !== false) : true
                             onToggled: {
                                 if (currentEffect) {
-                                    workspace.updateSelectedEffectProperty("enabled", checked)
+                                    workspace.updateSelectedEffectProperty("enabled", checked);
                                 }
                             }
                         }
@@ -91,10 +89,14 @@ Item {
                             Layout.fillWidth: true
                             Text {
                                 text: {
-                                    if (!currentEffect) return "Parameter Value";
-                                    if (currentEffect.type === "low_pass_filter") return "Cutoff Frequency";
-                                    if (currentEffect.type === "reverb") return "Room Size";
-                                    if (currentEffect.type === "delay") return "Delay Time";
+                                    if (!currentEffect)
+                                        return "Parameter Value";
+                                    if (currentEffect.type === "low_pass_filter")
+                                        return "Cutoff Frequency";
+                                    if (currentEffect.type === "reverb")
+                                        return "Room Size";
+                                    if (currentEffect.type === "delay")
+                                        return "Delay Time";
                                     return "Gain Level";
                                 }
                                 color: "white"
@@ -114,12 +116,22 @@ Item {
                         Slider {
                             id: parameterValueSlider
                             Layout.fillWidth: true
-                            from: 0
-                            to: 100
+
+                            from: currentEffect && currentEffect.type === "low_pass_filter" ? 20 : 0
+                            to: {
+                                if (!currentEffect)
+                                    return 100;
+                                if (currentEffect.type === "low_pass_filter")
+                                    return 20000;
+                                if (currentEffect.type === "delay")
+                                    return 1;
+                                return 100;
+                            }
+
                             value: currentEffect ? currentEffect.value : 0
                             onMoved: {
                                 if (currentEffect) {
-                                    workspace.updateSelectedEffectProperty("value", value)
+                                    workspace.updateSelectedEffectProperty("value", value);
                                 }
                             }
                             background: Rectangle {
@@ -145,13 +157,71 @@ Item {
                                 color: "#7aa2f7"
                             }
                         }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 4
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Text {
+                                    text: "Mix Level"
+                                    color: "white"
+                                    font.family: "monospace"
+                                    font.pixelSize: 12
+                                    Layout.fillWidth: true
+                                }
+                                Text {
+                                    text: currentEffect ? Math.round(currentEffect.mix !== undefined ? currentEffect.mix : 100) + "%" : "100%"
+                                    color: "#7aa2f7"
+                                    font.family: "monospace"
+                                    font.bold: true
+                                    font.pixelSize: 12
+                                }
+                            }
+
+                            Slider {
+                                id: mixValueSlider
+                                Layout.fillWidth: true
+                                from: 0
+                                to: 100
+                                value: currentEffect ? (currentEffect.mix !== undefined ? currentEffect.mix : 100) : 100
+                                onMoved: {
+                                    if (currentEffect) {
+                                        workspace.updateSelectedEffectProperty("mix", value);
+                                    }
+                                }
+                                background: Rectangle {
+                                    x: mixValueSlider.leftPadding
+                                    y: mixValueSlider.topPadding + mixValueSlider.availableHeight / 2 - height / 2
+                                    width: mixValueSlider.availableWidth
+                                    height: 4
+                                    radius: 2
+                                    color: "#3b4261"
+                                    Rectangle {
+                                        width: mixValueSlider.visualPosition * parent.width
+                                        height: parent.height
+                                        color: "#7aa2f7"
+                                        radius: 2
+                                    }
+                                }
+                                handle: Rectangle {
+                                    x: mixValueSlider.leftPadding + mixValueSlider.visualPosition * (mixValueSlider.availableWidth - width)
+                                    y: mixValueSlider.topPadding + mixValueSlider.availableHeight / 2 - height / 2
+                                    width: 12
+                                    height: 12
+                                    radius: 6
+                                    color: "#7aa2f7"
+                                }
+                            }
+                        }
                     }
                 }
-                Item { Layout.fillHeight: true }
+                Item {
+                    Layout.fillHeight: true
+                }
             }
         }
 
-        // --- SUB-PANEL 2: MERGED HARDWARE INPUT ASSIGNMENTS ---
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -190,7 +260,8 @@ Item {
                             readonly property string hardwareIdentifier: modelData
 
                             readonly property bool isMappingActive: {
-                                if (!currentEffect || !currentEffect.hardwareMaps) return false;
+                                if (!currentEffect || !currentEffect.hardwareMaps)
+                                    return false;
                                 let assignment = currentEffect.hardwareMaps[hardwareIdentifier];
                                 return (assignment !== undefined && assignment !== "" && assignment !== "None");
                             }
@@ -216,7 +287,8 @@ Item {
                                     enabled: !!currentEffect
                                     scale: 0.8
                                     onToggled: {
-                                        if (!currentEffect) return;
+                                        if (!currentEffect)
+                                            return;
                                         if (!checked) {
                                             workspace.updateSelectedEffectHardwareMap(hardwareRowWrapper.hardwareIdentifier, "None");
                                         } else {
@@ -231,23 +303,29 @@ Item {
                                     visible: hardwareRowWrapper.isMappingActive && !!currentEffect
 
                                     model: {
-                                        if (!currentEffect) return ["None"];
+                                        if (!currentEffect)
+                                            return ["None"];
                                         let fields = ["Enabled"];
-                                        if (currentEffect.type === "low_pass_filter") fields.push("Cutoff");
-                                        else if (currentEffect.type === "reverb") fields.push("Room Size");
-                                        else if (currentEffect.type === "delay") fields.push("Time");
-                                        else fields.push("Gain");
+                                        if (currentEffect.type === "low_pass_filter")
+                                            fields.push("Cutoff");
+                                        else if (currentEffect.type === "reverb")
+                                            fields.push("Room Size");
+                                        else if (currentEffect.type === "delay")
+                                            fields.push("Time");
+                                        else
+                                            fields.push("Gain");
                                         return fields;
                                     }
 
                                     currentIndex: {
-                                        if (!currentEffect || !currentEffect.hardwareMaps) return 0;
+                                        if (!currentEffect || !currentEffect.hardwareMaps)
+                                            return 0;
                                         let activeSelection = currentEffect.hardwareMaps[hardwareRowWrapper.hardwareIdentifier];
                                         let matchIndex = model.indexOf(activeSelection);
                                         return matchIndex >= 0 ? matchIndex : 0;
                                     }
 
-                                    onActivated: (index) => {
+                                    onActivated: index => {
                                         workspace.updateSelectedEffectHardwareMap(hardwareRowWrapper.hardwareIdentifier, model[index]);
                                     }
 
@@ -280,7 +358,6 @@ Item {
                                         radius: 4
                                     }
 
-                                    // FIX: Override and fully style the internal Popup wrapper container
                                     popup: Popup {
                                         y: mappingTargetDropdown.height + 2
                                         width: mappingTargetDropdown.width
@@ -292,7 +369,7 @@ Item {
                                             implicitHeight: contentHeight
                                             model: mappingTargetDropdown.popup.visible ? mappingTargetDropdown.delegateModel : null
                                             currentIndex: mappingTargetDropdown.highlightedIndex
-                                            ScrollIndicator.vertical: ScrollIndicator { }
+                                            ScrollIndicator.vertical: ScrollIndicator {}
                                         }
 
                                         background: Rectangle {
@@ -311,7 +388,9 @@ Item {
                         }
                     }
                 }
-                Item { Layout.fillHeight: true }
+                Item {
+                    Layout.fillHeight: true
+                }
             }
         }
     }

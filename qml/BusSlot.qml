@@ -12,7 +12,7 @@ Item {
     property bool busEnabled: true
     property alias busSwitchChecked: busSwitch.checked
 
-    readonly property var effectChain: rootWindow.matrixRevision >= 0 ? rootWindow.busEffectsMatrix[busIndex] : []
+    readonly property var effectChain: rootWindow.busEffectsMatrix[busIndex]
 
     Item {
         anchors.fill: parent
@@ -24,7 +24,7 @@ Item {
             anchors.top: parent.top
             anchors.bottom: parent.bottom
             orientation: ListView.Horizontal
-            interactive: true
+            interactive: false
             clip: true
             boundsBehavior: Flickable.StopAtBounds
             spacing: 0
@@ -44,10 +44,20 @@ Item {
                     radius: 3
                     color: hScrollBar.pressed ? "#ff007c" : "#3b4261"
                     opacity: hScrollBar.hovered || hScrollBar.pressed ? 1.0 : 0.5
-                    Behavior on color { ColorAnimation { duration: 100 } }
-                    Behavior on opacity { NumberAnimation { duration: 100 } }
+                    Behavior on color {
+                        ColorAnimation {
+                            duration: 100
+                        }
+                    }
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: 100
+                        }
+                    }
                 }
-                background: Rectangle { color: "transparent" }
+                background: Rectangle {
+                    color: "transparent"
+                }
             }
 
             delegate: Item {
@@ -58,7 +68,6 @@ Item {
                 readonly property bool isSlotEmpty: modelData === null
                 readonly property int slotIndex: index
 
-                // Selection check state matching the active workspace index definitions
                 readonly property bool isSelected: rootWindow.selectedBus === busRow.busIndex && rootWindow.selectedSlot === slotIndex
 
                 RowLayout {
@@ -105,14 +114,13 @@ Item {
                         Layout.alignment: Qt.AlignVCenter
                         color: "#16161E"
 
-                        // Glow hot-pink if selected, blue if populated, grey if empty
                         border.color: isSelected ? "#ff007c" : (isSlotEmpty ? "#3b4261" : "#7aa2f7")
                         border.width: isSelected ? 2 : (isSlotEmpty ? 1 : 2)
                         radius: 8
 
-                        // Click handle selection configuration
                         MouseArea {
                             anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
                             z: -1
                             onClicked: {
                                 if (!isSlotEmpty) {
@@ -125,9 +133,14 @@ Item {
                         DropArea {
                             anchors.fill: parent
                             keys: typeof ModuleRegistry !== "undefined" ? ModuleRegistry.modules.map(m => m.effectType) : []
-                            onEntered: { if (!isSelected) slotBox.border.color = "#9ece6a" }
-                            onExited: { slotBox.border.color = isSelected ? "#ff007c" : (isSlotEmpty ? "#3b4261" : "#7aa2f7") }
-                            onDropped: (drop) => {
+                            onEntered: {
+                                if (!isSelected)
+                                    slotBox.border.color = "#9ece6a";
+                            }
+                            onExited: {
+                                slotBox.border.color = isSelected ? "#ff007c" : (isSlotEmpty ? "#3b4261" : "#7aa2f7");
+                            }
+                            onDropped: drop => {
                                 let src = drop.source;
                                 busRow.workspace.setBusEffect(busRow.busIndex, slotIndex, {
                                     "type": src.effectType,
@@ -162,14 +175,23 @@ Item {
                         }
 
                         Loader {
+                            id: effectLoader
                             anchors.fill: parent
                             anchors.margins: 6
                             active: !isSlotEmpty
                             visible: !isSlotEmpty
                             source: !isSlotEmpty ? "../modules/" + slotData.qmlSource : ""
+
+                            Binding {
+                                target: effectLoader.item
+                                property: "effectValue"
+                                value: (rootWindow.valueRevision >= 0 && slotData) ? slotData.value : 0
+                                restoreMode: Binding.RestoreNone
+                                when: effectLoader.item !== null
+                            }
+
                             onLoaded: {
                                 if (item) {
-                                    item.effectValue = slotData.value;
                                     item.effectIndex = busRow.busIndex;
                                     if (item.hasOwnProperty("title"))
                                         item.title = slotData.displayName || slotData.type;
@@ -197,10 +219,20 @@ Item {
 
             gradient: Gradient {
                 orientation: Gradient.Horizontal
-                GradientStop { position: 0.0; color: "#0d0d12" }
-                GradientStop { position: 1.0; color: "transparent" }
+                GradientStop {
+                    position: 0.0
+                    color: "#0d0d12"
+                }
+                GradientStop {
+                    position: 1.0
+                    color: "transparent"
+                }
             }
-            Behavior on opacity { NumberAnimation { duration: 150 } }
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 150
+                }
+            }
         }
 
         Item {
@@ -265,7 +297,9 @@ Item {
                         Layout.alignment: Qt.AlignHCenter
                     }
 
-                    Item { Layout.fillHeight: true }
+                    Item {
+                        Layout.fillHeight: true
+                    }
 
                     Switch {
                         id: busSwitch
@@ -284,7 +318,11 @@ Item {
                                 height: 16
                                 radius: 8
                                 color: "white"
-                                Behavior on x { NumberAnimation { duration: 120 } }
+                                Behavior on x {
+                                    NumberAnimation {
+                                        duration: 120
+                                    }
+                                }
                             }
                         }
                     }

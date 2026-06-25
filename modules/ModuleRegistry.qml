@@ -37,9 +37,13 @@ QtObject {
     function paramTransformer(type, value) {
         switch (type) {
         case "gain":
-            return { "gain": Math.round((value / 100) * 32767).toString() };
+            return {
+                "gain": Math.round((value / 100) * 32767).toString()
+            };
         case "tuner":
-            return { "frequency": Math.round(value).toString() };
+            return {
+                "frequency": Math.round(value).toString()
+            };
         default:
             console.warn("No transformer for", type);
             return {};
