@@ -22,7 +22,7 @@ Module_base {
         Slider {
             id: slider
             from: 0
-            to: 1
+            to: 10
             value: root.effectValue
             Layout.fillWidth: true
             onMoved: root.valueChanged(root.effectIndex, value)
