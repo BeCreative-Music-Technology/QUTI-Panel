@@ -1,0 +1,85 @@
+name: macOS build
+
+# Builds a universal (Apple Silicon + Intel) QUTI Panel app and packages it as a .dmg.
+# The .dmg is attached to the workflow run under "Artifacts".
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    name: Build macOS app
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          # Pinned to the version used for Windows development. A wildcard can pick a release
+          # published so recently that its checksums are not on the mirrors yet, which fails the install.
+          version: '6.11.2'
+          host: mac
+          target: desktop
+          arch: clang_64
+          cache: true
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Bundle Qt into the app
+        run: |
+          app="build/appQUTI_interface.app"
+
+          # macdeployqt copies QML imports recursively, so deploying QtQuick also copies QtQuick/LocalStorage.
+          # That pulls in Qt SQL and then every SQL driver plugin, whose database libraries do not exist here.
+          # The panel does not use LocalStorage, so hide it during deployment (and restore it for the Qt cache).
+          local_storage="$QT_ROOT_DIR/qml/QtQuick/LocalStorage"
+          mv "$local_storage" "$RUNNER_TEMP/LocalStorage"
+          trap 'mv "$RUNNER_TEMP/LocalStorage" "$local_storage"' EXIT
+
+          # -qmldir lets macdeployqt find the QML imports (QtQuick.Controls, Layouts, ...) to copy into the bundle
+          macdeployqt "$app" -qmldir="$GITHUB_WORKSPACE" -always-overwrite -verbose=1
+
+          if [ -e "$app/Contents/Frameworks/QtSql.framework" ] || [ -e "$app/Contents/PlugIns/sqldrivers" ]; then
+            echo "::error::Qt SQL or SQL driver plugins were bundled, but the panel does not use them"
+            exit 1
+          fi
+
+          # main.cpp selects the Material style at runtime, so make sure that style was bundled too
+          qml_dir="$app/Contents/Resources/qml/QtQuick/Controls"
+          if [ ! -d "$qml_dir/Material" ]; then
+            echo "Material style missing from bundle, copying it in"
+            cp -R "$QT_ROOT_DIR/qml/QtQuick/Controls/Material" "$qml_dir/"
+          fi
+
+          # Deploying rewrites the binaries, so re-apply an ad-hoc signature (required to run on Apple Silicon)
+          codesign --force --deep --sign - "$app"
+          codesign --verify --deep --strict "$app"
+
+      - name: Create DMG
+        run: |
+          mkdir -p dmg
+          cp -R build/appQUTI_interface.app "dmg/QUTI Panel.app"
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "QUTI Panel" -srcfolder dmg -ov -format UDZO QUTI-Panel-macOS.dmg
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: QUTI-Panel-macOS
+          path: QUTI-Panel-macOS.dmg
+          if-no-files-found: error

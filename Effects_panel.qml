@@ -54,7 +54,7 @@ Item {
                     Layout.fillHeight: true
 
                     Repeater {
-                        model: typeof ModuleRegistry !== "undefined" ? ModuleRegistry.modules : []
+                        model: ModuleRegistry.modules
 
                         delegate: EffectTile {
                             Layout.fillWidth: true

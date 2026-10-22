@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QUTI_interface
 
 Item {
     id: busRow
@@ -12,7 +13,7 @@ Item {
     property bool busEnabled: true
     property alias busSwitchChecked: busSwitch.checked
 
-    readonly property var effectChain: rootWindow.busEffectsMatrix[busIndex]
+    readonly property var effectChain: workspace ? workspace.busEffectsMatrix[busIndex] : []
 
     Item {
         anchors.fill: parent
@@ -68,7 +69,7 @@ Item {
                 readonly property bool isSlotEmpty: modelData === null
                 readonly property int slotIndex: index
 
-                readonly property bool isSelected: rootWindow.selectedBus === busRow.busIndex && rootWindow.selectedSlot === slotIndex
+                readonly property bool isSelected: busRow.workspace.selectedBus === busRow.busIndex && busRow.workspace.selectedSlot === slotIndex
 
                 RowLayout {
                     anchors.fill: parent
@@ -124,15 +125,15 @@ Item {
                             z: -1
                             onClicked: {
                                 if (!isSlotEmpty) {
-                                    rootWindow.selectedBus = busRow.busIndex;
-                                    rootWindow.selectedSlot = slotIndex;
+                                    busRow.workspace.selectedBus = busRow.busIndex;
+                                    busRow.workspace.selectedSlot = slotIndex;
                                 }
                             }
                         }
 
                         DropArea {
                             anchors.fill: parent
-                            keys: typeof ModuleRegistry !== "undefined" ? ModuleRegistry.modules.map(m => m.effectType) : []
+                            keys: ModuleRegistry.modules.map(m => m.effectType)
                             onEntered: {
                                 if (!isSelected)
                                     slotBox.border.color = "#9ece6a";
@@ -185,7 +186,7 @@ Item {
                             Binding {
                                 target: effectLoader.item
                                 property: "effectValue"
-                                value: (rootWindow.valueRevision >= 0 && slotData) ? slotData.value : 0
+                                value: (busRow.workspace.valueRevision >= 0 && slotData) ? slotData.value : 0
                                 restoreMode: Binding.RestoreNone
                                 when: effectLoader.item !== null
                             }

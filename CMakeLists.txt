@@ -9,6 +9,10 @@ find_package(Qt6 REQUIRED COMPONENTS QuickControls2)
 
 qt_standard_project_setup(REQUIRES 6.10)
 
+set_source_files_properties(modules/ModuleRegistry.qml PROPERTIES
+    QT_QML_SINGLETON_TYPE TRUE
+)
+
 qt_add_executable(appQUTI_interface
     main.cpp
     bridge/interface_bridge.cpp
@@ -20,6 +24,7 @@ qt_add_qml_module(appQUTI_interface
     QML_FILES
         Main.qml
         Effects_panel.qml
+        PresetsPanel.qml
         qml/Module_base.qml
         qml/BusSlot.qml
         qml/EffectTile.qml
@@ -35,7 +40,7 @@ qt_add_qml_module(appQUTI_interface
     RESOURCES
         assets/input.svg
         assets/output.svg
-        QML_FILES PresetsPanel.qml
+        presets/builtin_presets.json
 )
 
 target_link_libraries(appQUTI_interface
@@ -47,8 +52,12 @@ target_link_libraries(appQUTI_interface PRIVATE Qt6::QuickControls2)
 set_target_properties(appQUTI_interface PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
+    MACOSX_BUNDLE_BUNDLE_NAME "QUTI Panel"
+    MACOSX_BUNDLE_GUI_IDENTIFIER nl.becreative.quti-panel
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
+    # Custom Info.plist so macOS explains why the app needs the local network (the guitar)
+    MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/macos/Info.plist.in
 )
 
 install(TARGETS appQUTI_interface
