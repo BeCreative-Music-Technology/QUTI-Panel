@@ -1,0 +1,69 @@
+name: macOS build
+
+# Builds a universal (Apple Silicon + Intel) QUTI Panel app and packages it as a .dmg.
+# The .dmg is attached to the workflow run under "Artifacts".
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    name: Build macOS app
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.11.*'
+          host: mac
+          target: desktop
+          arch: clang_64
+          cache: true
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Bundle Qt into the app
+        run: |
+          # -qmldir lets macdeployqt find the QML imports (QtQuick.Controls, Layouts, ...) to copy into the bundle
+          macdeployqt build/appQUTI_interface.app -qmldir="$GITHUB_WORKSPACE" -always-overwrite -verbose=1
+
+          # main.cpp selects the Material style at runtime, so make sure that style was bundled too
+          qml_dir="build/appQUTI_interface.app/Contents/Resources/qml/QtQuick/Controls"
+          if [ ! -d "$qml_dir/Material" ]; then
+            echo "Material style missing from bundle, copying it in"
+            cp -R "$QT_ROOT_DIR/qml/QtQuick/Controls/Material" "$qml_dir/"
+          fi
+
+          # Deploying rewrites the binaries, so re-apply an ad-hoc signature (required to run on Apple Silicon)
+          codesign --force --deep --sign - build/appQUTI_interface.app
+          codesign --verify --deep --strict build/appQUTI_interface.app
+
+      - name: Create DMG
+        run: |
+          mkdir -p dmg
+          cp -R build/appQUTI_interface.app "dmg/QUTI Panel.app"
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "QUTI Panel" -srcfolder dmg -ov -format UDZO QUTI-Panel-macOS.dmg
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: QUTI-Panel-macOS
+          path: QUTI-Panel-macOS.dmg
+          if-no-files-found: error

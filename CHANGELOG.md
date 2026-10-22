@@ -23,3 +23,8 @@
 - Fixed: saving under an existing name created a duplicate entry.
 - Fixed: names with dots ("v1.2") were cut short.
 - Fixed: toasts from the presets panel never showed.
+
+### macOS build
+- GitHub Actions workflow (`.github/workflows/macos.yml`) builds a universal macOS app (Apple Silicon + Intel) and uploads it as `QUTI-Panel-macOS.dmg`.
+- The app is ad-hoc signed, not notarized: open it the first time with right-click → Open.
+- The Info.plist explains the Local Network permission macOS asks for when connecting to the guitar.

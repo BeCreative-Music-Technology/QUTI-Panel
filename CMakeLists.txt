@@ -52,8 +52,12 @@ target_link_libraries(appQUTI_interface PRIVATE Qt6::QuickControls2)
 set_target_properties(appQUTI_interface PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
+    MACOSX_BUNDLE_BUNDLE_NAME "QUTI Panel"
+    MACOSX_BUNDLE_GUI_IDENTIFIER nl.becreative.quti-panel
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
+    # Custom Info.plist so macOS explains why the app needs the local network (the guitar)
+    MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/macos/Info.plist.in
 )
 
 install(TARGETS appQUTI_interface
