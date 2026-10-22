@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QUTI_interface
 
 Item {
     id: baseRoot
@@ -9,6 +10,12 @@ Item {
     property real effectValue: 0.0
     property string title: ""
     property string effectId: ""
+    property string effectType: ""
+    // Edited parameter of this effect (key, label, unit, min, max), see ModuleRegistry
+    readonly property var parameter: {
+        let module = ModuleRegistry.find(effectType);
+        return module ? module.parameter : { "key": "", "label": "", "unit": "", "min": 0, "max": 1 };
+    }
 
     signal removeRequested
     signal valueChanged(int index, real newValue)

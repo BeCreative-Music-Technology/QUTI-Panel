@@ -1,18 +1,19 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import "../qml"
+import QUTI_interface
 
 Module_base {
     id: root
     title: "LOW PASS FILTER"
+    effectType: "low_pass_filter"
 
     ColumnLayout {
         anchors.fill: parent
         spacing: 5
 
         Text {
-            text: "CUTOFF: " + slider.value.toFixed(0) + " Hz"
+            text: root.parameter.label.toUpperCase() + ": " + slider.value.toFixed(0) + " " + root.parameter.unit
             color: "#a9b1d6"
             font.pixelSize: 11
             font.bold: true
@@ -21,8 +22,8 @@ Module_base {
 
         Slider {
             id: slider
-            from: 20
-            to: 20000
+            from: root.parameter.min
+            to: root.parameter.max
             value: root.effectValue
             Layout.fillWidth: true
             onMoved: root.valueChanged(root.effectIndex, value)

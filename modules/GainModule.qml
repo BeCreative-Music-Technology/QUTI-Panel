@@ -2,18 +2,18 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QUTI_interface
-import "../qml"
 
 Module_base {
     id: root
     title: "GAIN"
+    effectType: "gain"
 
     ColumnLayout {
         anchors.fill: parent
         spacing: 5
 
         Text {
-            text: "GAIN LEVEL: " + slider.value.toFixed(0) + "%"
+            text: root.parameter.label.toUpperCase() + ": " + slider.value.toFixed(1) + " " + root.parameter.unit
             color: "#a9b1d6"
             font.pixelSize: 11
             font.bold: true
@@ -22,8 +22,8 @@ Module_base {
 
         Slider {
             id: slider
-            from: 0
-            to: 100
+            from: root.parameter.min
+            to: root.parameter.max
             value: root.effectValue
             Layout.fillWidth: true
             onMoved: root.valueChanged(root.effectIndex, value)

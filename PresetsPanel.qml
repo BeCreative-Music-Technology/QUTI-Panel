@@ -482,12 +482,26 @@ Rectangle {
 
     Component.onCompleted: {
         if (typeof interfaceBridge !== "undefined") {
-            let filesData = interfaceBridge.loadAllPresetFiles();
             presetsModel.clear();
+
+            // Built-in presets come first and are read-only
+            let builtInPresets = interfaceBridge.loadBuiltInPresets();
+            for (let b = 0; b < builtInPresets.length; b++) {
+                presetsModel.append({
+                    "name": builtInPresets[b].name,
+                    "description": builtInPresets[b].description,
+                    "data": builtInPresets[b].data,
+                    "builtIn": true
+                });
+            }
+
+            let filesData = interfaceBridge.loadAllPresetFiles();
             for (let i = 0; i < filesData.length; i += 2) {
                 presetsModel.append({
                     "name": filesData[i],
-                    "data": filesData[i + 1]
+                    "description": "",
+                    "data": filesData[i + 1],
+                    "builtIn": false
                 });
             }
         }
@@ -497,16 +511,31 @@ Rectangle {
         let name = saveNameField.text.trim();
         if (name === "")
             return;
+        let existingIndex = indexOfPreset(name);
+        if (existingIndex >= 0 && presetsModel.get(existingIndex).builtIn) {
+            showToast(name + " is a built-in preset, choose another name");
+            return;
+        }
         if (workspace && typeof interfaceBridge !== "undefined") {
             let data = workspace.serializeGraph();
             let stringifiedData = JSON.stringify(data);
 
-            interfaceBridge.savePresetToFile(name, stringifiedData);
+            if (!interfaceBridge.savePresetToFile(name, stringifiedData)) {
+                showToast("Could not save preset " + name);
+                return;
+            }
 
-            presetsModel.append({
-                "name": name,
-                "data": stringifiedData
-            });
+            // Saving under an existing name overwrites that file, so update the entry instead of duplicating it
+            if (existingIndex >= 0) {
+                presetsModel.setProperty(existingIndex, "data", stringifiedData);
+            } else {
+                presetsModel.append({
+                    "name": name,
+                    "description": "",
+                    "data": stringifiedData,
+                    "builtIn": false
+                });
+            }
             saveDialog.visible = false;
             showToast("Preset " + name + " saved");
         }
@@ -520,7 +549,20 @@ Rectangle {
             let oldName = presetsModel.get(pendingIndex).name;
             let rawData = presetsModel.get(pendingIndex).data;
 
-            interfaceBridge.savePresetToFile(newName, rawData);
+            // Renaming to the same name would save and then delete the very same file
+            if (newName === oldName) {
+                renameDialog.visible = false;
+                pendingIndex = -1;
+                return;
+            }
+            if (indexOfPreset(newName) >= 0) {
+                showToast("A preset named " + newName + " already exists");
+                return;
+            }
+            if (!interfaceBridge.savePresetToFile(newName, rawData)) {
+                showToast("Could not rename to " + newName);
+                return;
+            }
             interfaceBridge.deletePresetFile(oldName);
 
             presetsModel.setProperty(pendingIndex, "name", newName);
@@ -557,9 +599,17 @@ Rectangle {
         showToast("Loaded " + name);
     }
 
+    function indexOfPreset(name) {
+        for (let i = 0; i < presetsModel.count; i++) {
+            if (presetsModel.get(i).name === name)
+                return i;
+        }
+        return -1;
+    }
+
     function showToast(msg) {
-        if (workspace && workspace.statusToast)
-            workspace.statusToast.show(msg);
+        if (workspace)
+            workspace.showStatus(msg);
     }
     ColumnLayout {
         anchors.fill: parent
@@ -632,6 +682,10 @@ Rectangle {
                             onClicked: mouse => mouse.accepted = false
                         }
 
+                        ToolTip.visible: rowHover.containsMouse && description !== ""
+                        ToolTip.delay: 600
+                        ToolTip.text: description
+
                         RowLayout {
                             anchors.fill: parent
                             anchors.leftMargin: 10
@@ -646,6 +700,25 @@ Rectangle {
                                 Layout.fillWidth: true
                                 elide: Text.ElideRight
                                 verticalAlignment: Text.AlignVCenter
+                            }
+
+                            Rectangle {
+                                visible: builtIn
+                                Layout.preferredWidth: builtInLabel.implicitWidth + 10
+                                Layout.preferredHeight: 16
+                                radius: 3
+                                color: "transparent"
+                                border.color: "#bb9af7"
+
+                                Text {
+                                    id: builtInLabel
+                                    anchors.centerIn: parent
+                                    text: "BUILT-IN"
+                                    color: "#bb9af7"
+                                    font.pixelSize: 8
+                                    font.bold: true
+                                    font.family: "monospace"
+                                }
                             }
 
                             Rectangle {
@@ -687,6 +760,7 @@ Rectangle {
 
                             Rectangle {
                                 id: renameBtn
+                                visible: !builtIn
                                 width: 22
                                 height: 22
                                 radius: 4
@@ -724,6 +798,7 @@ Rectangle {
 
                             Rectangle {
                                 id: deleteBtn
+                                visible: !builtIn
                                 width: 22
                                 height: 22
                                 radius: 4

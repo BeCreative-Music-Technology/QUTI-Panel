@@ -1,0 +1,417 @@
+{
+  "presets": [
+    {
+      "name": "Clean",
+      "description": "Unprocessed signal at unity gain on bus 0.",
+      "config": {
+        "main_volume": 52428,
+        "audio_buses": [
+          {
+            "id": "bus_0",
+            "enabled": true,
+            "effects": [
+              {
+                "effect_type": "gain",
+                "enabled": true,
+                "mix": 65535,
+                "parameters": [
+                  {
+                    "key": "gain",
+                    "value": 16384,
+                    "input_control_id": ""
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "bus_1",
+            "enabled": false,
+            "effects": []
+          },
+          {
+            "id": "bus_2",
+            "enabled": false,
+            "effects": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "Warm Lead",
+      "description": "Rolled-off highs with a boost, plus a dotted delay and a medium room.",
+      "config": {
+        "main_volume": 52428,
+        "audio_buses": [
+          {
+            "id": "bus_0",
+            "enabled": true,
+            "effects": [
+              {
+                "effect_type": "low_pass_filter",
+                "enabled": true,
+                "mix": 65535,
+                "parameters": [
+                  {
+                    "key": "frequency",
+                    "value": 8134,
+                    "input_control_id": ""
+                  },
+                  {
+                    "key": "q_factor",
+                    "value": 2750,
+                    "input_control_id": ""
+                  }
+                ]
+              },
+              {
+                "effect_type": "gain",
+                "enabled": true,
+                "mix": 65535,
+                "parameters": [
+                  {
+                    "key": "gain",
+                    "value": 32768,
+                    "input_control_id": ""
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "bus_1",
+            "enabled": true,
+            "effects": [
+              {
+                "effect_type": "delay",
+                "enabled": true,
+                "mix": 19661,
+                "parameters": [
+                  {
+                    "key": "delay",
+                    "value": 12020,
+                    "input_control_id": ""
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "bus_2",
+            "enabled": true,
+            "effects": [
+              {
+                "effect_type": "reverb",
+                "enabled": true,
+                "mix": 16384,
+                "parameters": [
+                  {
+                    "key": "room_size",
+                    "value": 32768,
+                    "input_control_id": ""
+                  },
+                  {
+                    "key": "decay",
+                    "value": 6524,
+                    "input_control_id": ""
+                  },
+                  {
+                    "key": "dampening",
+                    "value": 32767,
+                    "input_control_id": ""
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Slapback",
+      "description": "Short single echo for rockabilly and country tones.",
+      "config": {
+        "main_volume": 52428,
+        "audio_buses": [
+          {
+            "id": "bus_0",
+            "enabled": true,
+            "effects": [
+              {
+                "effect_type": "delay",
+                "enabled": true,
+                "mix": 22937,
+                "parameters": [
+                  {
+                    "key": "delay",
+                    "value": 3623,
+                    "input_control_id": ""
+                  }
+                ]
+              },
+              {
+                "effect_type": "gain",
+                "enabled": true,
+                "mix": 65535,
+                "parameters": [
+                  {
+                    "key": "gain",
+                    "value": 24576,
+                    "input_control_id": ""
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "bus_1",
+            "enabled": false,
+            "effects": []
+          },
+          {
+            "id": "bus_2",
+            "enabled": false,
+            "effects": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "Ambient Wash",
+      "description": "Dark, wide reverb and long delay; the rotary controls the reverb mix.",
+      "config": {
+        "main_volume": 49151,
+        "audio_buses": [
+          {
+            "id": "bus_0",
+            "enabled": true,
+            "effects": [
+              {
+                "effect_type": "low_pass_filter",
+                "enabled": true,
+                "mix": 65535,
+                "parameters": [
+                  {
+                    "key": "frequency",
+                    "value": 3870,
+                    "input_control_id": ""
+                  },
+                  {
+                    "key": "q_factor",
+                    "value": 2750,
+                    "input_control_id": ""
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "bus_1",
+            "enabled": true,
+            "effects": [
+              {
+                "effect_type": "reverb",
+                "enabled": true,
+                "mix": 39321,
+                "parameters": [
+                  {
+                    "key": "room_size",
+                    "value": 58982,
+                    "input_control_id": ""
+                  },
+                  {
+                    "key": "mix",
+                    "value": 39321,
+                    "input_control_id": "rotary_0"
+                  },
+                  {
+                    "key": "decay",
+                    "value": 6524,
+                    "input_control_id": ""
+                  },
+                  {
+                    "key": "dampening",
+                    "value": 32767,
+                    "input_control_id": ""
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "bus_2",
+            "enabled": true,
+            "effects": [
+              {
+                "effect_type": "delay",
+                "enabled": true,
+                "mix": 29491,
+                "parameters": [
+                  {
+                    "key": "delay",
+                    "value": 16137,
+                    "input_control_id": ""
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Filter Sweep",
+      "description": "Low-pass filter whose cutoff is played with the rotary.",
+      "config": {
+        "main_volume": 52428,
+        "audio_buses": [
+          {
+            "id": "bus_0",
+            "enabled": true,
+            "effects": [
+              {
+                "effect_type": "low_pass_filter",
+                "enabled": true,
+                "mix": 65535,
+                "parameters": [
+                  {
+                    "key": "frequency",
+                    "value": 2558,
+                    "input_control_id": "rotary_0"
+                  },
+                  {
+                    "key": "q_factor",
+                    "value": 2750,
+                    "input_control_id": ""
+                  }
+                ]
+              },
+              {
+                "effect_type": "gain",
+                "enabled": true,
+                "mix": 65535,
+                "parameters": [
+                  {
+                    "key": "gain",
+                    "value": 24576,
+                    "input_control_id": ""
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "bus_1",
+            "enabled": false,
+            "effects": []
+          },
+          {
+            "id": "bus_2",
+            "enabled": false,
+            "effects": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "Laser Strings",
+      "description": "Laser 1 sweeps the filter, laser 2 the reverb amount and laser 3 the echo amount.",
+      "config": {
+        "main_volume": 52428,
+        "audio_buses": [
+          {
+            "id": "bus_0",
+            "enabled": true,
+            "effects": [
+              {
+                "effect_type": "low_pass_filter",
+                "enabled": true,
+                "mix": 65535,
+                "parameters": [
+                  {
+                    "key": "frequency",
+                    "value": 9774,
+                    "input_control_id": "laser_0"
+                  },
+                  {
+                    "key": "q_factor",
+                    "value": 2750,
+                    "input_control_id": ""
+                  }
+                ]
+              },
+              {
+                "effect_type": "gain",
+                "enabled": true,
+                "mix": 65535,
+                "parameters": [
+                  {
+                    "key": "gain",
+                    "value": 24576,
+                    "input_control_id": ""
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "bus_1",
+            "enabled": true,
+            "effects": [
+              {
+                "effect_type": "reverb",
+                "enabled": true,
+                "mix": 26214,
+                "parameters": [
+                  {
+                    "key": "room_size",
+                    "value": 39321,
+                    "input_control_id": ""
+                  },
+                  {
+                    "key": "mix",
+                    "value": 26214,
+                    "input_control_id": "laser_1"
+                  },
+                  {
+                    "key": "decay",
+                    "value": 6524,
+                    "input_control_id": ""
+                  },
+                  {
+                    "key": "dampening",
+                    "value": 32767,
+                    "input_control_id": ""
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "bus_2",
+            "enabled": true,
+            "effects": [
+              {
+                "effect_type": "delay",
+                "enabled": true,
+                "mix": 22937,
+                "parameters": [
+                  {
+                    "key": "delay",
+                    "value": 10538,
+                    "input_control_id": ""
+                  },
+                  {
+                    "key": "mix",
+                    "value": 22937,
+                    "input_control_id": "laser_2"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

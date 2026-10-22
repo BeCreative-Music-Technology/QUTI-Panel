@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QUTI_interface
 
 Item {
     id: configRoot
@@ -10,6 +11,7 @@ Item {
     property var workspace: null
 
     readonly property var currentEffect: (workspace && (workspace.matrixRevision >= 0 || workspace.valueRevision >= 0)) ? workspace.selectedEffect : null
+    readonly property var currentModule: currentEffect ? ModuleRegistry.find(currentEffect.type) : null
 
     ColumnLayout {
         anchors.fill: parent
@@ -88,24 +90,14 @@ Item {
                         RowLayout {
                             Layout.fillWidth: true
                             Text {
-                                text: {
-                                    if (!currentEffect)
-                                        return "Parameter Value";
-                                    if (currentEffect.type === "low_pass_filter")
-                                        return "Cutoff Frequency";
-                                    if (currentEffect.type === "reverb")
-                                        return "Room Size";
-                                    if (currentEffect.type === "delay")
-                                        return "Delay Time";
-                                    return "Gain Level";
-                                }
+                                text: currentModule ? currentModule.parameter.label : "Parameter Value"
                                 color: "white"
                                 font.family: "monospace"
                                 font.pixelSize: 12
                                 Layout.fillWidth: true
                             }
                             Text {
-                                text: currentEffect ? Math.round(currentEffect.value) : "0"
+                                text: currentEffect && currentModule ? (currentModule.parameter.max - currentModule.parameter.min < 100 ? currentEffect.value.toFixed(1) : Math.round(currentEffect.value)) + " " + currentModule.parameter.unit : "0"
                                 color: "#7aa2f7"
                                 font.family: "monospace"
                                 font.bold: true
@@ -117,16 +109,8 @@ Item {
                             id: parameterValueSlider
                             Layout.fillWidth: true
 
-                            from: currentEffect && currentEffect.type === "low_pass_filter" ? 20 : 0
-                            to: {
-                                if (!currentEffect)
-                                    return 100;
-                                if (currentEffect.type === "low_pass_filter")
-                                    return 20000;
-                                if (currentEffect.type === "delay")
-                                    return 1;
-                                return 100;
-                            }
+                            from: currentModule ? currentModule.parameter.min : 0
+                            to: currentModule ? currentModule.parameter.max : 100
 
                             value: currentEffect ? currentEffect.value : 0
                             onMoved: {
@@ -242,22 +226,32 @@ Item {
                     font.family: "monospace"
                 }
 
+                Text {
+                    text: currentEffect ? "Controls driving " + currentEffect.displayName.toUpperCase() + ". Lasers set the value from your hand's distance along the beam (5-30 cm) while you touch it." : "Select an effect to map controls. Current assignments:"
+                    color: "#565f89"
+                    font.pixelSize: 10
+                    font.family: "monospace"
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                }
+
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 10
 
                     Repeater {
-                        model: ["Rotary", "Button", "Laser-1", "Laser-2", "Laser-3"]
+                        model: ModuleRegistry.hardwareControls
 
                         delegate: Rectangle {
                             id: hardwareRowWrapper
                             Layout.fillWidth: true
-                            height: 48
+                            Layout.preferredHeight: currentEffect ? 48 : Math.max(48, assignmentsText.implicitHeight + 20)
                             color: "#1e1e28"
                             radius: 6
                             border.color: "#24283b"
 
-                            readonly property string hardwareIdentifier: modelData
+                            readonly property string hardwareIdentifier: modelData.name
+                            readonly property var assignments: (workspace && workspace.matrixRevision >= 0) ? workspace.hardwareAssignments(hardwareIdentifier) : []
 
                             readonly property bool isMappingActive: {
                                 if (!currentEffect || !currentEffect.hardwareMaps)
@@ -274,17 +268,29 @@ Item {
 
                                 Text {
                                     text: hardwareRowWrapper.hardwareIdentifier
-                                    color: hardwareRowWrapper.isMappingActive ? "#9ece6a" : "#565f89"
+                                    color: hardwareRowWrapper.isMappingActive || (!currentEffect && hardwareRowWrapper.assignments.length > 0) ? "#9ece6a" : "#565f89"
                                     font.family: "monospace"
                                     font.bold: true
                                     font.pixelSize: 12
                                     Layout.preferredWidth: 72
                                 }
 
+                                Text {
+                                    id: assignmentsText
+                                    visible: !currentEffect
+                                    text: hardwareRowWrapper.assignments.length > 0 ? hardwareRowWrapper.assignments.join("
+") : "Unassigned"
+                                    color: hardwareRowWrapper.assignments.length > 0 ? "#c0caf5" : "#414868"
+                                    font.family: "monospace"
+                                    font.pixelSize: 10
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
+
                                 Switch {
                                     id: assignmentSwitch
                                     checked: hardwareRowWrapper.isMappingActive
-                                    enabled: !!currentEffect
+                                    visible: !!currentEffect
                                     scale: 0.8
                                     onToggled: {
                                         if (!currentEffect)
@@ -292,7 +298,7 @@ Item {
                                         if (!checked) {
                                             workspace.updateSelectedEffectHardwareMap(hardwareRowWrapper.hardwareIdentifier, "None");
                                         } else {
-                                            workspace.updateSelectedEffectHardwareMap(hardwareRowWrapper.hardwareIdentifier, "Enabled");
+                                            workspace.updateSelectedEffectHardwareMap(hardwareRowWrapper.hardwareIdentifier, currentModule.controls[0].label);
                                         }
                                     }
                                 }
@@ -302,20 +308,7 @@ Item {
                                     Layout.fillWidth: true
                                     visible: hardwareRowWrapper.isMappingActive && !!currentEffect
 
-                                    model: {
-                                        if (!currentEffect)
-                                            return ["None"];
-                                        let fields = ["Enabled"];
-                                        if (currentEffect.type === "low_pass_filter")
-                                            fields.push("Cutoff");
-                                        else if (currentEffect.type === "reverb")
-                                            fields.push("Room Size");
-                                        else if (currentEffect.type === "delay")
-                                            fields.push("Time");
-                                        else
-                                            fields.push("Gain");
-                                        return fields;
-                                    }
+                                    model: currentModule ? currentModule.controls.map(control => control.label) : []
 
                                     currentIndex: {
                                         if (!currentEffect || !currentEffect.hardwareMaps)
@@ -382,7 +375,7 @@ Item {
 
                                 Item {
                                     Layout.fillWidth: true
-                                    visible: !mappingTargetDropdown.visible
+                                    visible: !mappingTargetDropdown.visible && !!currentEffect
                                 }
                             }
                         }
