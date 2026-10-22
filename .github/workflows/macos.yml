@@ -18,12 +18,14 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.11.*'
+          # Pinned to the version used for Windows development. A wildcard can pick a release
+          # published so recently that its checksums are not on the mirrors yet, which fails the install.
+          version: '6.11.2'
           host: mac
           target: desktop
           arch: clang_64
