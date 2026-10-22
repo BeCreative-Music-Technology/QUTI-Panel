@@ -42,19 +42,33 @@ jobs:
 
       - name: Bundle Qt into the app
         run: |
+          app="build/appQUTI_interface.app"
+
+          # macdeployqt copies QML imports recursively, so deploying QtQuick also copies QtQuick/LocalStorage.
+          # That pulls in Qt SQL and then every SQL driver plugin, whose database libraries do not exist here.
+          # The panel does not use LocalStorage, so hide it during deployment (and restore it for the Qt cache).
+          local_storage="$QT_ROOT_DIR/qml/QtQuick/LocalStorage"
+          mv "$local_storage" "$RUNNER_TEMP/LocalStorage"
+          trap 'mv "$RUNNER_TEMP/LocalStorage" "$local_storage"' EXIT
+
           # -qmldir lets macdeployqt find the QML imports (QtQuick.Controls, Layouts, ...) to copy into the bundle
-          macdeployqt build/appQUTI_interface.app -qmldir="$GITHUB_WORKSPACE" -always-overwrite -verbose=1
+          macdeployqt "$app" -qmldir="$GITHUB_WORKSPACE" -always-overwrite -verbose=1
+
+          if [ -e "$app/Contents/Frameworks/QtSql.framework" ] || [ -e "$app/Contents/PlugIns/sqldrivers" ]; then
+            echo "::error::Qt SQL or SQL driver plugins were bundled, but the panel does not use them"
+            exit 1
+          fi
 
           # main.cpp selects the Material style at runtime, so make sure that style was bundled too
-          qml_dir="build/appQUTI_interface.app/Contents/Resources/qml/QtQuick/Controls"
+          qml_dir="$app/Contents/Resources/qml/QtQuick/Controls"
           if [ ! -d "$qml_dir/Material" ]; then
             echo "Material style missing from bundle, copying it in"
             cp -R "$QT_ROOT_DIR/qml/QtQuick/Controls/Material" "$qml_dir/"
           fi
 
           # Deploying rewrites the binaries, so re-apply an ad-hoc signature (required to run on Apple Silicon)
-          codesign --force --deep --sign - build/appQUTI_interface.app
-          codesign --verify --deep --strict build/appQUTI_interface.app
+          codesign --force --deep --sign - "$app"
+          codesign --verify --deep --strict "$app"
 
       - name: Create DMG
         run: |
